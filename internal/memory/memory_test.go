@@ -237,34 +237,22 @@ func TestRecall(t *testing.T) {
 	}
 }
 
-func TestContextPartsFitHookLimit(t *testing.T) {
+func TestContextFitsOneHookAndPrioritisesKeyMemories(t *testing.T) {
 	st := Store{Root: t.TempDir()}
-	desc := strings.Repeat("a long description of something important ", 4)
-	save := func(n int) {
-		for i := 0; i < n; i++ {
-			st.Save(Memory{Name: fmt.Sprintf("memory-number-%03d", i), Type: "project", Scope: User(), Description: desc})
+	repo := gitRepo(t, "git@github.com:o/r.git")
+	long := strings.Repeat("a long description of something important ", 4)
+	st.Save(Memory{Name: "push-only-after-ok", Type: "feedback", Scope: User(), Description: "wait for an explicit OK before pushing " + long})
+	st.Save(Memory{Name: "bench-rule", Type: "feedback", Scope: Project("o-r"), Description: "bench assertions stay general " + long})
+	for i := 0; i < 250; i++ {
+		st.Save(Memory{Name: fmt.Sprintf("status-note-%03d", i), Type: "project", Scope: Project("o-r"), Description: long})
+	}
+	ctx, _ := st.Context(repo)
+	if len(ctx) > contextBudget {
+		t.Fatalf("context is %d chars, budget %d", len(ctx), contextBudget)
+	}
+	for _, want := range []string{"wait for an explicit OK before pushing a long", "bench assertions stay general a long", "- status-note-249\n"} {
+		if !strings.Contains(ctx, want) {
+			t.Errorf("missing %q", want)
 		}
-	}
-	save(60) // ~11K: needs two parts, full descriptions
-	parts, _ := st.ContextParts(t.TempDir())
-	if len(parts) != 2 || !strings.Contains(parts[0], strings.TrimSpace(desc)) {
-		t.Fatalf("got %d parts", len(parts))
-	}
-	if !strings.HasPrefix(parts[1], "# Shared memory (mom), continued") || !strings.Contains(parts[1], "(continued)") {
-		t.Fatalf("part 2 header:\n%.200s", parts[1])
-	}
-	save(400) // far too big: descriptions shrink to fit three parts
-	parts, _ = st.ContextParts(t.TempDir())
-	if len(parts) > ContextParts {
-		t.Fatalf("%d parts", len(parts))
-	}
-	all := strings.Join(parts, "")
-	for _, p := range parts {
-		if len(p) > partSize {
-			t.Fatalf("part is %d chars", len(p))
-		}
-	}
-	if !strings.Contains(all, "memory-number-399") {
-		t.Fatal("every memory should still be listed by name")
 	}
 }

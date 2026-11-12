@@ -9,7 +9,6 @@ import (
 
 	"mom/internal/env"
 	"mom/internal/fsx"
-	"mom/internal/memory"
 	"mom/internal/ojson"
 	"mom/internal/plan"
 )
@@ -54,16 +53,14 @@ func IntegrationPlan(p env.Paths, momBin string) plan.Plan {
 	recallCmd := shellQuote(momBin) + recallSuffix
 
 	editJSON(&pl, p.ClaudeSettings, func(o *ojson.Object, why *[]string) {
-		// Claude caps each hook's output at ~10K characters, so the index
-		// is split across one hook per part.
-		if removeHook(o, "SessionStart", hookSuffix) {
-			*why = append(*why, "replace single SessionStart hook with split index")
-		}
-		for i := 1; i <= memory.ContextParts; i++ {
-			suffix := fmt.Sprintf("%s --part %d", hookSuffix, i)
-			if addHook(o, "SessionStart", shellQuote(momBin)+suffix, suffix, nil) {
-				*why = append(*why, fmt.Sprintf("SessionStart memory hook (part %d)", i))
+		// An earlier version split the index across hooks; one is enough now.
+		for i := 1; i <= 3; i++ {
+			if removeHook(o, "SessionStart", fmt.Sprintf("%s --part %d", hookSuffix, i)) {
+				*why = append(*why, fmt.Sprintf("remove split-index hook (part %d)", i))
 			}
+		}
+		if addHook(o, "SessionStart", hookCmd, hookSuffix, nil) {
+			*why = append(*why, "SessionStart memory hook")
 		}
 		if addHook(o, "UserPromptSubmit", recallCmd, recallSuffix, nil) {
 			*why = append(*why, "UserPromptSubmit recall hook")

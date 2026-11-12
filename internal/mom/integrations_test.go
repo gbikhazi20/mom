@@ -46,7 +46,7 @@ func TestIntegrationPlanIsIdempotentAndPreservesSettings(t *testing.T) {
           },
           {
             "type": "command",
-            "command": "/old/mom mem context --hook"
+            "command": "/old/mom mem context --hook --part 2"
           }`, 1)
 	write(t, p.ClaudeSettings, settings)
 
@@ -62,7 +62,7 @@ func TestIntegrationPlanIsIdempotentAndPreservesSettings(t *testing.T) {
 		t.Errorf("key order changed: %v", o.Keys)
 	}
 	s := string(b)
-	for _, want := range []string{`"rex session-start"`, `"` + bin + ` mem context --hook --part 1"`, `"` + bin + ` mem context --hook --part 3"`, `"Bash(go test:*)"`, `"Bash(mom mem:*)"`, `"autoMemoryEnabled": false`} {
+	for _, want := range []string{`"rex session-start"`, `"` + bin + ` mem context --hook"`, `"Bash(go test:*)"`, `"Bash(mom mem:*)"`, `"autoMemoryEnabled": false`} {
 		if !strings.Contains(s, want) {
 			t.Errorf("settings missing %s:\n%s", want, s)
 		}
@@ -83,7 +83,7 @@ func TestIntegrationPlanIsIdempotentAndPreservesSettings(t *testing.T) {
 	}
 
 	if strings.Contains(s, "/old/mom") {
-		t.Errorf("old unsplit hook should be removed:\n%s", s)
+		t.Errorf("old split-index hook should be removed:\n%s", s)
 	}
 	if pl := IntegrationPlan(p, bin); len(pl.Actions) != 0 {
 		t.Fatalf("not idempotent: %+v", pl.Actions)
@@ -91,7 +91,7 @@ func TestIntegrationPlanIsIdempotentAndPreservesSettings(t *testing.T) {
 	// Moving the binary updates the hook in place rather than adding another.
 	mustApply(t, p, IntegrationPlan(p, "/opt/mom"))
 	b, _ = os.ReadFile(p.ClaudeSettings)
-	if strings.Count(string(b), "mem context --hook") != 3 || strings.Count(string(b), "mem recall --hook") != 1 || !strings.Contains(string(b), "/opt/mom mem context --hook --part 2") {
+	if strings.Count(string(b), "mem context --hook") != 1 || strings.Count(string(b), "mem recall --hook") != 1 || !strings.Contains(string(b), "/opt/mom mem context --hook") {
 		t.Errorf("hook not updated in place:\n%s", b)
 	}
 	_ = plan.Runtime{}

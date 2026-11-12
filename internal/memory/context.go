@@ -8,32 +8,28 @@ import (
 	"mom/internal/project"
 )
 
-// Claude Code cuts each hook's output at about 10,000 characters (moving
-// the rest to a file), so the index is packed into parts that each fit, one
-// hook per part. Descriptions are shortened only if the full index needs
-// more than ContextParts parts.
+// contextBudget keeps the index inside one hook's output: Claude Code moves
+// anything over ~10,000 characters to a file and shows only a preview.
+//
+// Not every line is worth the same. User-wide memories and feedback/reference
+// entries change how an agent behaves, so they keep full descriptions.
+// Project status notes share what's left; below a useful length they're
+// listed by name only (per-prompt recall still brings their text when a
+// prompt matches).
 const (
-	ContextParts = 3
-	partSize     = 9000
+	contextBudget = 9000
+	fullDesc      = 200
+	minUsefulDesc = 40
 )
 
-// Context returns the whole index (all parts joined), for display and for
-// agents without a per-hook limit.
+// Context renders what a SessionStart hook injects: the user index and the
+// current project's index, within contextBudget.
 func (st Store) Context(dir string) (string, error) {
-	parts, err := st.ContextParts(dir)
-	return strings.Join(parts, "\n"), err
-}
-
-// ContextParts renders the index as at most ContextParts chunks, each under
-// partSize characters.
-func (st Store) ContextParts(dir string) ([]string, error) {
 	scopes, info := ScopesFor(dir)
-	head := []string{
-		"# Shared memory (mom)",
-		"Memories shared by all your coding agents. `mom mem show <name>` reads one, `mom mem search <words>` finds more; see the Memory section of your instructions for saving.",
-	}
+	head := "# Shared memory (mom)\n" +
+		"Memories shared by all your coding agents. `mom mem show <name>` reads one, `mom mem search <words>` finds more; see the Memory section of your instructions for saving.\n"
 	if info == nil {
-		head = append(head, "Not in a git repo, so only user memories apply.")
+		head += "Not in a git repo, so only user memories apply.\n"
 	}
 	type section struct {
 		title string
@@ -43,7 +39,7 @@ func (st Store) ContextParts(dir string) ([]string, error) {
 	for _, s := range scopes {
 		ms, err := st.List(s)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		title := "User memories (apply everywhere)"
 		if !s.IsUser() {
@@ -51,49 +47,41 @@ func (st Store) ContextParts(dir string) ([]string, error) {
 		}
 		sections = append(sections, section{title, ms})
 	}
-	render := func(descMax int) []string {
-		var parts []string
-		var cur strings.Builder
-		curTitle := ""
-		flush := func() {
-			if cur.Len() > 0 {
-				parts = append(parts, strings.TrimRight(cur.String(), "\n")+"\n")
-				cur.Reset()
-			}
-		}
-		add := func(line, title string) {
-			if cur.Len() > 0 && cur.Len()+len(line)+1 > partSize {
-				flush()
-				fmt.Fprintf(&cur, "# Shared memory (mom), continued\n\n## %s (continued)\n", title)
-			}
-			cur.WriteString(line + "\n")
-		}
-		for _, h := range head {
-			add(h, "")
-		}
+	statusNote := func(m Memory) bool { return !m.Scope.IsUser() && m.Type == "project" }
+	render := func(keyMax, statusMax int) string {
+		var b strings.Builder
+		b.WriteString(head)
 		for _, sec := range sections {
-			curTitle = sec.title
-			add(fmt.Sprintf("\n## %s: %d", sec.title, len(sec.ms)), curTitle)
+			fmt.Fprintf(&b, "\n## %s: %d\n", sec.title, len(sec.ms))
 			if len(sec.ms) == 0 {
-				add("(none yet)", curTitle)
+				b.WriteString("(none yet)\n")
 			}
 			for _, m := range sec.ms {
-				if desc := clip(oneLine(m.Description), descMax); desc != "" {
-					add(fmt.Sprintf("- %s: %s", m.Name, desc), curTitle)
+				max := keyMax
+				if statusNote(m) {
+					max = statusMax
+				}
+				if desc := clip(oneLine(m.Description), max); desc != "" {
+					fmt.Fprintf(&b, "- %s: %s\n", m.Name, desc)
 				} else {
-					add("- "+m.Name, curTitle)
+					fmt.Fprintf(&b, "- %s\n", m.Name)
 				}
 			}
 		}
-		flush()
-		return parts
+		return b.String()
 	}
-	for descMax := 300; descMax > 0; descMax -= 20 {
-		if parts := render(descMax); len(parts) <= ContextParts {
-			return parts, nil
+	// Shrink status-note descriptions first, then everything else.
+	for statusMax := fullDesc; statusMax >= minUsefulDesc; statusMax -= 10 {
+		if out := render(fullDesc, statusMax); len(out) <= contextBudget {
+			return out, nil
 		}
 	}
-	return render(0), nil // names only; may exceed ContextParts for huge stores
+	for keyMax := fullDesc; keyMax >= minUsefulDesc; keyMax -= 10 {
+		if out := render(keyMax, 0); len(out) <= contextBudget {
+			return out, nil
+		}
+	}
+	return render(0, 0), nil // names only
 }
 
 func clip(s string, n int) string {
