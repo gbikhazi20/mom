@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"mom/internal/env"
-	"mom/internal/fsx"
-	"mom/internal/plan"
+	"github.com/gbikhazi20/mom/internal/env"
+	"github.com/gbikhazi20/mom/internal/fsx"
+	"github.com/gbikhazi20/mom/internal/plan"
 )
 
 // fixture mirrors the real setup mom was written against: an empty

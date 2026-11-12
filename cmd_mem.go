@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"mom/internal/env"
-	"mom/internal/memory"
-	"mom/internal/project"
+	"github.com/gbikhazi20/mom/internal/env"
+	"github.com/gbikhazi20/mom/internal/memory"
+	"github.com/gbikhazi20/mom/internal/project"
 )
 
 const memUsage = `mom mem — memory shared by Claude Code and Codex

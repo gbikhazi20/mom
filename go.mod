@@ -1,4 +1,4 @@
-module mom
+module github.com/gbikhazi20/mom
 
 go 1.27.3
 

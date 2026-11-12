@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"mom/internal/env"
-	"mom/internal/fsx"
-	"mom/internal/plan"
+	"github.com/gbikhazi20/mom/internal/env"
+	"github.com/gbikhazi20/mom/internal/fsx"
+	"github.com/gbikhazi20/mom/internal/plan"
 )
 
 // Link is one managed native path and the canonical path it should point to.

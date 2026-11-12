@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mom/internal/project"
+	"github.com/gbikhazi20/mom/internal/project"
 )
 
 // contextBudget keeps the index inside one hook's output: Claude Code moves

@@ -14,7 +14,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"mom/internal/secrets"
+	"github.com/gbikhazi20/mom/internal/secrets"
 )
 
 // File is the canonical servers.toml.

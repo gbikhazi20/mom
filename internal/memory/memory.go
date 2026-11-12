@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"mom/internal/fsx"
-	"mom/internal/project"
+	"github.com/gbikhazi20/mom/internal/fsx"
+	"github.com/gbikhazi20/mom/internal/project"
 )
 
 var Types = []string{"user", "feedback", "project", "reference"}

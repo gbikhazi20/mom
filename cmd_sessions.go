@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"mom/internal/codexrpc"
-	"mom/internal/env"
-	"mom/internal/sessions"
+	"github.com/gbikhazi20/mom/internal/codexrpc"
+	"github.com/gbikhazi20/mom/internal/env"
+	"github.com/gbikhazi20/mom/internal/sessions"
 )
 
 // sessionSources gathers what both agents know, once per command.

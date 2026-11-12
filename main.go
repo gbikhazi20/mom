@@ -11,10 +11,10 @@ import (
 	"sort"
 	"strings"
 
-	"mom/internal/env"
-	"mom/internal/mom"
-	"mom/internal/plan"
-	"mom/internal/secrets"
+	"github.com/gbikhazi20/mom/internal/env"
+	"github.com/gbikhazi20/mom/internal/mom"
+	"github.com/gbikhazi20/mom/internal/plan"
+	"github.com/gbikhazi20/mom/internal/secrets"
 )
 
 const usage = `mom keeps Claude Code and Codex in sync from ~/.agents.

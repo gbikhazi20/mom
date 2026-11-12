@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"mom/internal/codexrpc"
-	"mom/internal/project"
+	"github.com/gbikhazi20/mom/internal/codexrpc"
+	"github.com/gbikhazi20/mom/internal/project"
 )
 
 func write(t *testing.T, path, content string) {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"mom/internal/codexrpc"
+	"github.com/gbikhazi20/mom/internal/codexrpc"
 )
 
 // Codex is a connection to the Codex daemon, or nil when it isn't running;

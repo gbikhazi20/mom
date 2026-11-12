@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"mom/internal/fsx"
-	"mom/internal/project"
+	"github.com/gbikhazi20/mom/internal/fsx"
+	"github.com/gbikhazi20/mom/internal/project"
 )
 
 // ClaudeSource is one ~/.claude/projects/<slug>/memory folder and where its

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"mom/internal/project"
+	"github.com/gbikhazi20/mom/internal/project"
 )
 
 // Scope decides which sessions belong "here": the current repo across all

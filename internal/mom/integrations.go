@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"mom/internal/env"
-	"mom/internal/fsx"
-	"mom/internal/ojson"
-	"mom/internal/plan"
+	"github.com/gbikhazi20/mom/internal/env"
+	"github.com/gbikhazi20/mom/internal/fsx"
+	"github.com/gbikhazi20/mom/internal/ojson"
+	"github.com/gbikhazi20/mom/internal/plan"
 )
 
 // The memory protocol mom maintains inside global.md. Both agents read it

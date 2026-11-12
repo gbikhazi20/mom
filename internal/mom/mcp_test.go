@@ -9,10 +9,10 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"mom/internal/env"
-	"mom/internal/mcp"
-	"mom/internal/plan"
-	"mom/internal/secrets"
+	"github.com/gbikhazi20/mom/internal/env"
+	"github.com/gbikhazi20/mom/internal/mcp"
+	"github.com/gbikhazi20/mom/internal/plan"
+	"github.com/gbikhazi20/mom/internal/secrets"
 )
 
 const key = "ctx7sk-test-1234567890"

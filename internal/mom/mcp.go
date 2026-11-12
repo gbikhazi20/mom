@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	"mom/internal/env"
-	"mom/internal/mcp"
-	"mom/internal/plan"
-	"mom/internal/secrets"
+	"github.com/gbikhazi20/mom/internal/env"
+	"github.com/gbikhazi20/mom/internal/mcp"
+	"github.com/gbikhazi20/mom/internal/plan"
+	"github.com/gbikhazi20/mom/internal/secrets"
 )
 
 // state is mom's private record of what it wrote, so it can remove servers

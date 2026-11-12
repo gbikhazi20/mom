@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"mom/internal/ojson"
-	"mom/internal/plan"
+	"github.com/gbikhazi20/mom/internal/ojson"
+	"github.com/gbikhazi20/mom/internal/plan"
 )
 
 func TestIntegrationPlanIsIdempotentAndPreservesSettings(t *testing.T) {
