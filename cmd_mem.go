@@ -232,6 +232,7 @@ func memContext(st memory.Store, args []string) int {
 	fs := flag.NewFlagSet("mem context", flag.ExitOnError)
 	hook := fs.Bool("hook", false, "read the hook payload on stdin, print hook JSON")
 	cwd := fs.String("cwd", "", "directory (default: current, or the hook's cwd)")
+	part := fs.Int("part", 0, "print only this part (1-based) of the index, for agents that cap each hook's output")
 	parseInterleaved(fs, args)
 	dir := *cwd
 	if *hook && dir == "" {
@@ -241,11 +242,21 @@ func memContext(st memory.Store, args []string) int {
 		dir, _ = os.Getwd()
 	}
 	text, err := st.Context(dir)
+	if *part > 0 {
+		parts, perr := st.ContextParts(dir)
+		text, err = "", perr
+		if *part <= len(parts) {
+			text = parts[*part-1]
+		}
+	}
 	if err != nil {
 		if *hook {
 			return 0 // never break session start
 		}
 		fail(err)
+	}
+	if *hook && text == "" {
+		return 0
 	}
 	if *hook {
 		fmt.Println(memory.HookOutput(text))

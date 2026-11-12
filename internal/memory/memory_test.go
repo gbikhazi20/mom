@@ -237,17 +237,34 @@ func TestRecall(t *testing.T) {
 	}
 }
 
-func TestContextFitsBudget(t *testing.T) {
+func TestContextPartsFitHookLimit(t *testing.T) {
 	st := Store{Root: t.TempDir()}
-	for i := 0; i < 150; i++ {
-		st.Save(Memory{Name: fmt.Sprintf("memory-number-%03d", i), Type: "project", Scope: User(),
-			Description: strings.Repeat("a long description of something important ", 4)})
+	desc := strings.Repeat("a long description of something important ", 4)
+	save := func(n int) {
+		for i := 0; i < n; i++ {
+			st.Save(Memory{Name: fmt.Sprintf("memory-number-%03d", i), Type: "project", Scope: User(), Description: desc})
+		}
 	}
-	ctx, _ := st.Context(t.TempDir())
-	if len(ctx) > contextBudget+200 {
-		t.Fatalf("context is %d chars, budget %d", len(ctx), contextBudget)
+	save(60) // ~11K: needs two parts, full descriptions
+	parts, _ := st.ContextParts(t.TempDir())
+	if len(parts) != 2 || !strings.Contains(parts[0], strings.TrimSpace(desc)) {
+		t.Fatalf("got %d parts", len(parts))
 	}
-	if !strings.Contains(ctx, "memory-number-149") {
+	if !strings.HasPrefix(parts[1], "# Shared memory (mom), continued") || !strings.Contains(parts[1], "(continued)") {
+		t.Fatalf("part 2 header:\n%.200s", parts[1])
+	}
+	save(400) // far too big: descriptions shrink to fit three parts
+	parts, _ = st.ContextParts(t.TempDir())
+	if len(parts) > ContextParts {
+		t.Fatalf("%d parts", len(parts))
+	}
+	all := strings.Join(parts, "")
+	for _, p := range parts {
+		if len(p) > partSize {
+			t.Fatalf("part is %d chars", len(p))
+		}
+	}
+	if !strings.Contains(all, "memory-number-399") {
 		t.Fatal("every memory should still be listed by name")
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"mom/internal/env"
 	"mom/internal/fsx"
+	"mom/internal/memory"
 	"mom/internal/ojson"
 	"mom/internal/plan"
 )
@@ -53,8 +54,16 @@ func IntegrationPlan(p env.Paths, momBin string) plan.Plan {
 	recallCmd := shellQuote(momBin) + recallSuffix
 
 	editJSON(&pl, p.ClaudeSettings, func(o *ojson.Object, why *[]string) {
-		if addHook(o, "SessionStart", hookCmd, hookSuffix, nil) {
-			*why = append(*why, "SessionStart memory hook")
+		// Claude caps each hook's output at ~10K characters, so the index
+		// is split across one hook per part.
+		if removeHook(o, "SessionStart", hookSuffix) {
+			*why = append(*why, "replace single SessionStart hook with split index")
+		}
+		for i := 1; i <= memory.ContextParts; i++ {
+			suffix := fmt.Sprintf("%s --part %d", hookSuffix, i)
+			if addHook(o, "SessionStart", shellQuote(momBin)+suffix, suffix, nil) {
+				*why = append(*why, fmt.Sprintf("SessionStart memory hook (part %d)", i))
+			}
 		}
 		if addHook(o, "UserPromptSubmit", recallCmd, recallSuffix, nil) {
 			*why = append(*why, "UserPromptSubmit recall hook")
@@ -165,6 +174,41 @@ func addHook(o *ojson.Object, event, cmd, suffix string, extra map[string]any) b
 	g.Set("hooks", []any{h})
 	hooks.Set(event, append(groups, g))
 	return true
+}
+
+// removeHook drops hooks under event whose command ends exactly with suffix,
+// and any matcher group left empty. Reports whether anything was removed.
+func removeHook(o *ojson.Object, event, suffix string) bool {
+	hooks := o.Obj("hooks")
+	groups := hooks.Arr(event)
+	removed := false
+	var keptGroups []any
+	for _, g := range groups {
+		gobj, ok := g.(*ojson.Object)
+		if !ok {
+			keptGroups = append(keptGroups, g)
+			continue
+		}
+		var kept []any
+		for _, h := range gobj.Arr("hooks") {
+			hobj, ok := h.(*ojson.Object)
+			c, _ := hobj.Get("command")
+			if s, _ := c.(string); ok && strings.HasSuffix(s, suffix) {
+				removed = true
+				continue
+			}
+			kept = append(kept, h)
+		}
+		if len(kept) == 0 && len(gobj.Arr("hooks")) > 0 {
+			continue
+		}
+		gobj.Set("hooks", kept)
+		keptGroups = append(keptGroups, gobj)
+	}
+	if removed {
+		hooks.Set(event, keptGroups)
+	}
+	return removed
 }
 
 func sameScalar(a, b any) bool { return fmt.Sprint(a) == fmt.Sprint(b) }
