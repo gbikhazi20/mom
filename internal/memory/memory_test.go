@@ -2,6 +2,7 @@ package memory
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -95,7 +96,7 @@ func TestContextAndHookFollowRepoAcrossWorktrees(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(ctx, "- style (feedback): be concise") || !strings.Contains(ctx, "- bench (project): bench needs db") {
+		if !strings.Contains(ctx, "- style: be concise") || !strings.Contains(ctx, "- bench: bench needs db") {
 			t.Fatalf("context from %s:\n%s", dir, ctx)
 		}
 	}
@@ -233,5 +234,20 @@ func TestRecall(t *testing.T) {
 	}
 	if out := FormatRecall(hits); !strings.Contains(out, "## hook-burst-incident") || !strings.Contains(out, "12 turns lost") {
 		t.Fatalf("format:\n%s", out)
+	}
+}
+
+func TestContextFitsBudget(t *testing.T) {
+	st := Store{Root: t.TempDir()}
+	for i := 0; i < 150; i++ {
+		st.Save(Memory{Name: fmt.Sprintf("memory-number-%03d", i), Type: "project", Scope: User(),
+			Description: strings.Repeat("a long description of something important ", 4)})
+	}
+	ctx, _ := st.Context(t.TempDir())
+	if len(ctx) > contextBudget+200 {
+		t.Fatalf("context is %d chars, budget %d", len(ctx), contextBudget)
+	}
+	if !strings.Contains(ctx, "memory-number-149") {
+		t.Fatal("every memory should still be listed by name")
 	}
 }
