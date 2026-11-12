@@ -24,11 +24,13 @@ type Paths struct {
 	BackupsDir   string
 
 	// Claude Code.
-	Claude       string
-	ClaudeMD     string
-	ClaudeSkills string
-	ClaudeRules  string
-	ClaudeJSON   string // ~/.claude.json (user-scope MCP servers live here)
+	Claude         string
+	ClaudeMD       string
+	ClaudeSkills   string
+	ClaudeRules    string
+	ClaudeJSON     string // ~/.claude.json (user-scope MCP servers live here)
+	ClaudeSettings string
+	ClaudeProjects string // per-folder session logs and auto-memory
 
 	// Codex.
 	Codex             string
@@ -36,6 +38,10 @@ type Paths struct {
 	CodexSkills       string // deprecated user location, still loaded by Codex
 	CodexSystemSkills string
 	CodexConfig       string
+	CodexHooks        string
+	CodexRules        string // mom's own exec-policy rules file
+	CodexSessions     string
+	MemoryDir         string
 }
 
 func Resolve() (Paths, error) {
@@ -67,17 +73,23 @@ func ForHome(home string) Paths {
 		StateFile:    filepath.Join(state, "state.json"),
 		BackupsDir:   filepath.Join(state, "backups"),
 
-		Claude:       claude,
-		ClaudeMD:     filepath.Join(claude, "CLAUDE.md"),
-		ClaudeSkills: filepath.Join(claude, "skills"),
-		ClaudeRules:  filepath.Join(claude, "rules"),
-		ClaudeJSON:   filepath.Join(home, ".claude.json"),
+		Claude:         claude,
+		ClaudeMD:       filepath.Join(claude, "CLAUDE.md"),
+		ClaudeSkills:   filepath.Join(claude, "skills"),
+		ClaudeRules:    filepath.Join(claude, "rules"),
+		ClaudeJSON:     filepath.Join(home, ".claude.json"),
+		ClaudeSettings: filepath.Join(claude, "settings.json"),
+		ClaudeProjects: filepath.Join(claude, "projects"),
 
 		Codex:             codex,
 		CodexAgentsMD:     filepath.Join(codex, "AGENTS.md"),
 		CodexSkills:       filepath.Join(codex, "skills"),
 		CodexSystemSkills: filepath.Join(codex, "skills", ".system"),
 		CodexConfig:       filepath.Join(codex, "config.toml"),
+		CodexHooks:        filepath.Join(codex, "hooks.json"),
+		CodexRules:        filepath.Join(codex, "rules", "mom.rules"),
+		CodexSessions:     filepath.Join(codex, "sessions"),
+		MemoryDir:         filepath.Join(agents, "memory"),
 	}
 }
 

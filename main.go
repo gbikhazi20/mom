@@ -24,6 +24,7 @@ Usage:
   mom sync   [--dry-run] [--force] [--json]  link everything in ~/.agents into both agents
   mom doctor [--all] [--json]            show drift, conflicts, and unmanaged config (exit 1 if action needed)
   mom adopt  <path> [--dry-run] [--json] make an agent's diverged copy the canonical one
+  mom mem ...                            shared memory (see: mom mem help)
   mom secret set <NAME> [value]          store a secret in Keychain (reads stdin if no value)
   mom secret ls [--json]                 secrets servers.toml references, and whether each is stored
 
@@ -33,6 +34,7 @@ Canonical layout:
   ~/.agents/claude/skills/<name>     Claude only
   ~/.agents/codex/skills/<name>      Codex only
   ~/.agents/mcp/servers.toml         -> ~/.claude.json (user scope), ~/.codex/config.toml
+  ~/.agents/memory/                  shared memory, loaded by a SessionStart hook in both agents
   ~/.agents/.mom/backups/            anything mom replaced
 `
 
@@ -57,6 +59,8 @@ func main() {
 		os.Exit(runAdopt(paths, args))
 	case "secret":
 		os.Exit(runSecret(paths, args))
+	case "mem", "memory":
+		os.Exit(runMem(paths, args))
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
@@ -72,7 +76,21 @@ func runtime() plan.Runtime {
 func syncPlan(p env.Paths, force bool) plan.Plan {
 	pl := mom.SyncPlan(p, force)
 	pl.Extend(mom.MCPSyncPlan(p, secrets.Default()))
+	pl.Extend(mom.IntegrationPlan(p, momBin()))
 	return pl
+}
+
+// momBin is this binary's real path, used in hooks so they work even when
+// an agent's PATH lacks ~/.local/bin.
+func momBin() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "mom"
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		return real
+	}
+	return exe
 }
 
 func runInit(p env.Paths, args []string) int {
@@ -146,6 +164,7 @@ func runDoctor(p env.Paths, args []string) int {
 	findings := mom.Doctor(p)
 	if mom.Initialized(p) {
 		findings = append(findings, mom.MCPDoctor(p, secrets.Default())...)
+		findings = append(findings, mom.IntegrationDoctor(p, momBin())...)
 	}
 	healthy := mom.Healthy(findings)
 	if *asJSON {

@@ -253,7 +253,9 @@ func TestRewriteCodexKeepsUnrelatedTables(t *testing.T) {
 	}
 }
 
-func RewriteCodexForTest(text string, s map[string]map[string]any) string { return mcp.RewriteCodex(text, s) }
+func RewriteCodexForTest(text string, s map[string]map[string]any) string {
+	return mcp.RewriteCodex(text, s)
+}
 
 func assertHealthy(t *testing.T, e mcpEnv) {
 	t.Helper()
@@ -283,4 +285,3 @@ func readClaude(t *testing.T, e mcpEnv) map[string]any {
 }
 
 func mustJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
-
