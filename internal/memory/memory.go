@@ -183,40 +183,16 @@ func (st Store) AllScopes() []Scope {
 	return out
 }
 
-// Search ranks memories in scopes by how well they match every term.
+// Search ranks memories in scopes by keyword relevance (same scoring as
+// recall, but every word counts and no minimum applies: the caller asked).
 func (st Store) Search(query string, scopes ...Scope) ([]Memory, error) {
-	terms := strings.Fields(strings.ToLower(query))
-	type hit struct {
-		m     Memory
-		score int
+	all, err := st.listAll(scopes)
+	if err != nil {
+		return nil, err
 	}
-	var hits []hit
-	for _, s := range scopes {
-		ms, err := st.List(s)
-		if err != nil {
-			return nil, err
-		}
-		for _, m := range ms {
-			head := strings.ToLower(m.Name + " " + m.Description)
-			body := strings.ToLower(m.Body)
-			score := 0
-			for _, t := range terms {
-				h, b := strings.Count(head, t), strings.Count(body, t)
-				if h+b == 0 {
-					score = 0
-					break
-				}
-				score += 5*h + b
-			}
-			if score > 0 {
-				hits = append(hits, hit{m, score})
-			}
-		}
-	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
-	out := make([]Memory, len(hits))
-	for i, h := range hits {
-		out[i] = h.m
+	var out []Memory
+	for _, sc := range score(all, query) {
+		out = append(out, sc.m)
 	}
 	return out, nil
 }

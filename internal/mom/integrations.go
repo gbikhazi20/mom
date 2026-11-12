@@ -20,7 +20,7 @@ const (
 	protocolEnd   = "<!-- /mom:memory -->"
 	protocolBody  = `## Memory
 
-You share a persistent memory with the user's other coding agents (Claude Code and Codex) through the ` + "`mom`" + ` CLI. Each session starts with an index of the user-wide memories and the current repo's memories. When an entry looks relevant, read it with ` + "`mom mem show <name>`" + `; when the index doesn't show what you need, try ` + "`mom mem search <words>`" + `.
+You share a persistent memory with the user's other coding agents (Claude Code and Codex) through the ` + "`mom`" + ` CLI. Each session starts with an index of the user-wide memories and the current repo's memories. Memories that match words in a prompt are attached to it automatically, once per conversation. When an index entry looks relevant, read it with ` + "`mom mem show <name>`" + `. When the index doesn't show what you need, search with two to four distinctive keywords rather than a sentence (` + "`mom mem search bench flaky trials`" + `); results are ranked, so a partial match still shows up, and ` + "`--all`" + ` searches every repo.
 
 Save a memory when you learn something a future session would otherwise have to rediscover: how the user wants you to work (corrections and approaches they confirmed), non-obvious facts about the project, ongoing goals and decisions, or pointers to external resources. Don't save what the code, the git history or these instructions already record, or anything that only matters to the current conversation.
 

@@ -261,18 +261,19 @@ func memRecall(p env.Paths, st memory.Store, args []string) int {
 	cwd := fs.String("cwd", "", "directory (default: current, or the hook's cwd)")
 	asJSON := fs.Bool("json", false, "JSON output")
 	pos := parseInterleaved(fs, args)
-	prompt, session, dir := strings.Join(pos, " "), "", *cwd
+	prompt, session, transcript, dir := strings.Join(pos, " "), "", "", *cwd
 	if *hook {
 		var payload struct {
-			Prompt    string `json:"prompt"`
-			Cwd       string `json:"cwd"`
-			SessionID string `json:"session_id"`
+			Prompt     string `json:"prompt"`
+			Cwd        string `json:"cwd"`
+			SessionID  string `json:"session_id"`
+			Transcript string `json:"transcript_path"`
 		}
 		b, _ := io.ReadAll(io.LimitReader(os.Stdin, 4<<20))
 		if json.Unmarshal(b, &payload) != nil {
 			return 0 // never get in the way of a prompt
 		}
-		prompt, session = payload.Prompt, payload.SessionID
+		prompt, session, transcript = payload.Prompt, payload.SessionID, payload.Transcript
 		if dir == "" {
 			dir = payload.Cwd
 		}
@@ -281,8 +282,15 @@ func memRecall(p env.Paths, st memory.Store, args []string) int {
 		dir, _ = os.Getwd()
 	}
 	scopes, _ := memory.ScopesFor(dir)
+	// Never attach a memory the conversation already holds: this session's
+	// earlier recalls, plus anything in the transcript (a resumed or forked
+	// conversation, or a memory the agent read with mom mem show).
 	seen := memory.LoadSeen(p.StateDir, session)
-	hits, err := st.Recall(prompt, scopes, seen.Seen)
+	exclude := memory.LoadedInTranscript(transcript)
+	for k := range seen.Seen {
+		exclude[k] = true
+	}
+	hits, err := st.Recall(prompt, scopes, exclude)
 	if err != nil {
 		if *hook {
 			return 0

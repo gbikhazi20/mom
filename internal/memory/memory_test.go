@@ -68,7 +68,7 @@ George reasons from first principles.
 	}
 }
 
-func TestSearchRanksAndRequiresAllTerms(t *testing.T) {
+func TestSearchRanks(t *testing.T) {
 	st := Store{Root: t.TempDir()}
 	st.Save(Memory{Name: "bench-flakes", Type: "project", Description: "bench CI flake audit", Body: "trials", Scope: Project("p")})
 	st.Save(Memory{Name: "other", Type: "project", Description: "unrelated", Body: "mentions bench once", Scope: Project("p")})
@@ -76,9 +76,10 @@ func TestSearchRanksAndRequiresAllTerms(t *testing.T) {
 	if len(hits) != 2 || hits[0].Name != "bench-flakes" {
 		t.Fatalf("hits = %v", names(hits))
 	}
-	hits, _ = st.Search("bench flake", Project("p"))
-	if len(hits) != 1 {
-		t.Fatalf("AND search = %v", names(hits))
+	// A sentence-style query still finds it, best match first.
+	hits, _ = st.Search("why are the bench trials flaky in CI", Project("p"))
+	if len(hits) == 0 || hits[0].Name != "bench-flakes" {
+		t.Fatalf("ranked search = %v", names(hits))
 	}
 }
 
@@ -210,30 +211,69 @@ func TestRecall(t *testing.T) {
 		}
 	}
 	save("hook-burst-incident", "incident: agent turns lost to a hook timeout during an MCP burst", "12 turns lost; MCP burst of tool calls")
-	save("lock-timeout-incident", "lock timeout incident in prod", "agent turns retried")
-	save("bench-ci-flake-audit", "bench CI flake audit", "trials flaky")
-	save("readme-style", "README conventions", "headings")
+	save("ps-ls-split", "splitting PS from LS into separate commands", "session command design")
+	save("sync-latency", "agent latency breakdown in prod", "mom sync took 60s")
+	// A weaker match for the MCP prompt: must not take the burst memory's
+	// place once that one has been recalled.
+	save("lock-timeout-incident", "lock timeout burst incident", "agent turns retried during a burst")
+	// Filler so "agent" and "prod" are common words, as in a real store.
+	for i := 0; i < 20; i++ {
+		save(fmt.Sprintf("agent-note-%d", i), "agent note about prod "+fmt.Sprint(i), "agent prod details")
+	}
 	scopes := []Scope{Project("p")}
-
-	hits, _ := st.Recall("why did agent turns get lost during the MCP burst?", scopes, nil)
-	if len(hits) != 1 || hits[0].Memory.Name != "hook-burst-incident" {
-		t.Fatalf("hits = %+v", hits)
-	}
-	if hits, _ := st.Recall("rename this variable please", scopes, nil); len(hits) != 0 {
-		t.Fatalf("trivial prompt recalled %+v", hits)
-	}
-	// Already-recalled memories are skipped for the rest of the session.
-	seen := LoadSeen(t.TempDir(), "sess-1")
-	hits, _ = st.Recall("agent turns lost in the MCP burst", scopes, seen.Seen)
-	seen.Add(hits)
-	again, _ := st.Recall("agent turns lost in the MCP burst", scopes, LoadSeen(filepath.Dir(seen.path)+"/..", "sess-1").Seen)
-	for _, h := range again {
-		if h.Memory.Name == "hook-burst-incident" {
-			t.Fatal("recalled twice in one session")
+	recall := func(prompt string) []string {
+		hits, err := st.Recall(prompt, scopes, nil)
+		if err != nil {
+			t.Fatal(err)
 		}
+		var out []string
+		for _, h := range hits {
+			out = append(out, h.Memory.Name)
+		}
+		return out
 	}
-	if out := FormatRecall(hits); !strings.Contains(out, "## hook-burst-incident") || !strings.Contains(out, "12 turns lost") {
+
+	if got := recall("why did agent turns get lost during the MCP burst?"); len(got) != 1 || got[0] != "hook-burst-incident" {
+		t.Errorf("MCP burst: %v", got)
+	}
+	if got := recall("should PS and LS share one command?"); len(got) == 0 || got[0] != "ps-ls-split" {
+		t.Errorf("two-letter acronym: %v", got)
+	}
+	// A common word in the description plus a rare word only in the body
+	// is not enough (this was real noise: "agents need to manage memories").
+	if got := recall("why do coding agents need to manage memories"); len(got) != 0 {
+		t.Errorf("noise recalled: %v", got)
+	}
+	if got := recall("rename this variable please"); len(got) != 0 {
+		t.Errorf("trivial prompt recalled %v", got)
+	}
+
+	// Already-recalled memories are skipped for the rest of the session.
+	state := t.TempDir()
+	seen := LoadSeen(state, "sess-1")
+	hits, _ := st.Recall("agent turns lost in the MCP burst", scopes, seen.Seen)
+	seen.Add(hits)
+	again, _ := st.Recall("agent turns lost in the MCP burst", scopes, LoadSeen(state, "sess-1").Seen)
+	if len(again) != 0 {
+		t.Fatalf("recalled twice, or a weaker match promoted in its place: %+v", again)
+	}
+
+	// A forked conversation (new session ID, same transcript) is covered by
+	// scanning the transcript for memories it already holds.
+	out := FormatRecall(hits)
+	if !strings.Contains(out, "## hook-burst-incident (project, project:p,") || !strings.Contains(out, "12 turns lost") {
 		t.Fatalf("format:\n%s", out)
+	}
+	transcript := filepath.Join(t.TempDir(), "t.jsonl")
+	line, _ := json.Marshal(map[string]any{"type": "attachment", "content": out})
+	shown, _ := json.Marshal(map[string]any{"type": "tool_result", "content": "ps-ls-split  [project, project:p]  updated 2026-11-06\nsplitting..."})
+	os.WriteFile(transcript, append(append(line, '\n'), shown...), 0o644)
+	loaded := LoadedInTranscript(transcript)
+	if !loaded["project:p/hook-burst-incident"] || !loaded["project:p/ps-ls-split"] || len(loaded) != 2 {
+		t.Fatalf("loaded = %v", loaded)
+	}
+	if hits, _ := st.Recall("should PS and LS share one command?", scopes, loaded); len(hits) != 0 {
+		t.Fatalf("memory already in transcript was recalled: %+v", hits)
 	}
 }
 

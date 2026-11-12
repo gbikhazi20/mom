@@ -14,16 +14,25 @@ import (
 
 // Recall picks the memories most relevant to a prompt so their full text can
 // be attached to that turn (the index alone only shows one-line summaries).
-// Matching is keyword-based: prompt words are weighted by how rare they are
-// across the memories, and a match in a memory's name or description counts
-// more than one in its body. Weak matches are dropped rather than padded.
+//
+// Matching is keyword-based. Every prompt word adds to a memory's score,
+// weighted by rarity. But a word that appears in more than a tenth of the
+// memories ("agent", "thread", "prod" in a repo about agents) says little
+// about which memory is meant, so to be recalled a memory must match a
+// distinctive word in its name or description, and then either a second
+// distinctive word or enough total score. Weak matches are dropped rather
+// than padded.
 
 const (
 	recallMax       = 3
 	recallBodyLimit = 1500
-	recallMinScore  = 8.0
-	// Drop hits scoring under this share of the best one, so a strong match
-	// doesn't drag weak ones along.
+	recallMinScore  = 12.0
+	// With only one distinctive word matched, the score must reach this.
+	recallOneTermScore = 20.0
+	// A word in more than this share of memories (or 3, for small stores)
+	// isn't distinctive.
+	distinctiveShare = 0.10
+	// Drop hits scoring under this share of the best one.
 	recallRelative = 0.45
 )
 
@@ -33,21 +42,19 @@ type Recalled struct {
 	Terms  []string `json:"terms"`
 }
 
-func (st Store) Recall(prompt string, scopes []Scope, exclude map[string]bool) ([]Recalled, error) {
-	terms := keywords(prompt)
-	if len(terms) == 0 {
-		return nil, nil
-	}
-	var all []Memory
-	for _, s := range scopes {
-		ms, err := st.List(s)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, ms...)
-	}
-	if len(all) == 0 {
-		return nil, nil
+type scored struct {
+	m               Memory
+	score           float64
+	terms           []string
+	distinct        int  // distinctive words matched
+	distinctHeadHit bool // a distinctive word in name/description
+}
+
+// score ranks memories against query words.
+func score(all []Memory, query string) []scored {
+	terms := keywords(query)
+	if len(terms) == 0 || len(all) == 0 {
+		return nil
 	}
 	type doc struct{ head, body map[string]int }
 	docs := make([]doc, len(all))
@@ -61,40 +68,101 @@ func (st Store) Recall(prompt string, scopes []Scope, exclude map[string]bool) (
 		}
 	}
 	n := float64(len(all))
-	var out []Recalled
+	limit := math.Max(3, distinctiveShare*n)
+	var out []scored
 	for i, m := range all {
-		if exclude[m.Scope.String()+"/"+m.Name] {
-			continue
-		}
-		score, headHit := 0.0, false
-		var matched []string
+		var sc scored
+		sc.m = m
 		for t := range terms {
 			h, b := docs[i].head[t], docs[i].body[t]
 			if h+b == 0 {
 				continue
 			}
 			idf := math.Log(1 + n/float64(df[t]))
-			score += idf * (3*math.Min(float64(h), 2) + math.Min(float64(b), 3))
-			headHit = headHit || h > 0
-			matched = append(matched, t)
+			sc.score += idf * (3*math.Min(float64(h), 2) + math.Min(float64(b), 3))
+			sc.terms = append(sc.terms, t)
+			if float64(df[t]) <= limit {
+				sc.distinct++
+				sc.distinctHeadHit = sc.distinctHeadHit || h > 0
+			}
 		}
-		if !headHit || len(matched) < 2 || score < recallMinScore {
+		if sc.score > 0 {
+			sort.Strings(sc.terms)
+			out = append(out, sc)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
+	return out
+}
+
+func (st Store) Recall(prompt string, scopes []Scope, exclude map[string]bool) ([]Recalled, error) {
+	all, err := st.listAll(scopes)
+	if err != nil {
+		return nil, err
+	}
+	var out []Recalled
+	best := 0.0 // best qualifying score, including memories already loaded
+	for _, sc := range score(all, prompt) {
+		strong := sc.distinct >= 2 || sc.score >= recallOneTermScore
+		if !sc.distinctHeadHit || len(sc.terms) < 2 || !strong || sc.score < recallMinScore {
 			continue
 		}
-		sort.Strings(matched)
-		out = append(out, Recalled{m, score, matched})
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
-	for i := range out {
-		if out[i].Score < recallRelative*out[0].Score {
-			out = out[:i]
+		if best == 0 {
+			best = sc.score
+		}
+		// Measured against the best match even when that one is already in
+		// the conversation, so skipping it doesn't promote weaker matches.
+		if sc.score < recallRelative*best {
+			break
+		}
+		if exclude[sc.m.Scope.String()+"/"+sc.m.Name] {
+			continue
+		}
+		out = append(out, Recalled{sc.m, sc.score, sc.terms})
+		if len(out) == recallMax {
 			break
 		}
 	}
-	if len(out) > recallMax {
-		out = out[:recallMax]
-	}
 	return out, nil
+}
+
+func (st Store) listAll(scopes []Scope) ([]Memory, error) {
+	var all []Memory
+	for _, s := range scopes {
+		ms, err := st.List(s)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, ms...)
+	}
+	return all, nil
+}
+
+// loadedMarkerRE finds memories already present in a conversation transcript:
+// recall's "## <name> (<type>, <scope>," headers and `mom mem show`'s
+// "<name>  [<type>, <scope>]" first line. JSON transcripts escape newlines,
+// so the patterns don't anchor on line starts.
+var loadedMarkerRE = regexp.MustCompile(`(?:## ([a-z0-9-]+) \((?:user|feedback|project|reference), (user|project:[a-z0-9-]+),|([a-z0-9-]+)  \[(?:user|feedback|project|reference), (user|project:[a-z0-9-]+)\])`)
+
+// LoadedInTranscript returns the memories (scope/name) a transcript already
+// contains, so a resumed or forked conversation isn't sent them again.
+func LoadedInTranscript(path string) map[string]bool {
+	out := map[string]bool{}
+	if path == "" {
+		return out
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return out
+	}
+	for _, m := range loadedMarkerRE.FindAllSubmatch(b, -1) {
+		if len(m[1]) > 0 {
+			out[string(m[2])+"/"+string(m[1])] = true
+		} else {
+			out[string(m[4])+"/"+string(m[3])] = true
+		}
+	}
+	return out
 }
 
 // FormatRecall renders recalled memories for injection into a turn.
@@ -185,7 +253,7 @@ func counts(s string) map[string]int {
 func keywords(prompt string) map[string]bool {
 	out := map[string]bool{}
 	for w := range counts(prompt) {
-		if len(w) >= 3 && !stopwords[w] {
+		if len(w) >= 2 && !stopwords[w] { // 2 letters keeps acronyms like GC, CI, PR
 			out[w] = true
 		}
 	}
@@ -210,7 +278,8 @@ var stopwords = func() map[string]bool {
 		some more most much very really still yet again back over only out own same such too way well while look think
 		know sure okay yeah thank thanks able going done doing tell show give take work working change update check
 		something anything everything thing things lets maybe might must time today day week try trying
-		keep during after before being because each every other these those into onto via per`) {
+		keep during after before being because each every other these those into onto via per
+		is it to of in on at do an or if so be we me my no up as by go ok vs us hi re id im ve ll`) {
 		m[stem(w)] = true
 	}
 	return m
