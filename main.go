@@ -25,6 +25,8 @@ Usage:
   mom doctor [--all] [--json]            show drift, conflicts, and unmanaged config (exit 1 if action needed)
   mom adopt  <path> [--dry-run] [--json] make an agent's diverged copy the canonical one
   mom mem ...                            shared memory (see: mom mem help)
+  mom ls [--all] [-n N] [--json]         Claude and Codex sessions in this repo, newest first
+  mom ps [--here] [--json]               running sessions, those waiting on you first
   mom secret set <NAME> [value]          store a secret in Keychain (reads stdin if no value)
   mom secret ls [--json]                 secrets servers.toml references, and whether each is stored
 
@@ -61,6 +63,10 @@ func main() {
 		os.Exit(runSecret(paths, args))
 	case "mem", "memory":
 		os.Exit(runMem(paths, args))
+	case "ls":
+		os.Exit(runLs(paths, args))
+	case "ps":
+		os.Exit(runPs(paths, args))
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:

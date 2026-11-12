@@ -31,6 +31,7 @@ type Paths struct {
 	ClaudeJSON     string // ~/.claude.json (user-scope MCP servers live here)
 	ClaudeSettings string
 	ClaudeProjects string // per-folder session logs and auto-memory
+	ClaudeLive     string // sessions/<pid>.json, one per running Claude process
 
 	// Codex.
 	Codex             string
@@ -41,6 +42,7 @@ type Paths struct {
 	CodexHooks        string
 	CodexRules        string // mom's own exec-policy rules file
 	CodexSessions     string
+	CodexIndex        string // session_index.jsonl (thread names)
 	MemoryDir         string
 }
 
@@ -80,6 +82,7 @@ func ForHome(home string) Paths {
 		ClaudeJSON:     filepath.Join(home, ".claude.json"),
 		ClaudeSettings: filepath.Join(claude, "settings.json"),
 		ClaudeProjects: filepath.Join(claude, "projects"),
+		ClaudeLive:     filepath.Join(claude, "sessions"),
 
 		Codex:             codex,
 		CodexAgentsMD:     filepath.Join(codex, "AGENTS.md"),
@@ -89,6 +92,7 @@ func ForHome(home string) Paths {
 		CodexHooks:        filepath.Join(codex, "hooks.json"),
 		CodexRules:        filepath.Join(codex, "rules", "mom.rules"),
 		CodexSessions:     filepath.Join(codex, "sessions"),
+		CodexIndex:        filepath.Join(codex, "session_index.jsonl"),
 		MemoryDir:         filepath.Join(agents, "memory"),
 	}
 }
