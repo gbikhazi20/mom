@@ -85,7 +85,7 @@ func MCPImportPlan(p env.Paths, store secrets.Store) plan.Plan {
 			s.Codex = b.Codex
 			if !sameCore(a, b) {
 				pl.Problem(p.CodexConfig, name+": Codex's definition differs from Claude's; imported Claude's",
-					"check ~/.agents/mcp/servers.toml (the old config.toml is backed up when sync rewrites it)")
+					"check ~/.mom/mcp/servers.toml (the old config.toml is backed up when sync rewrites it)")
 			}
 		case inC:
 			s = fromClaude(c)

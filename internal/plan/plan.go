@@ -1,6 +1,6 @@
 // Package plan is the only code that changes the filesystem. Commands build a
 // Plan of Actions, print it (dry run) or Apply it. Anything that would discard
-// content goes through OpBackup, which moves it under ~/.agents/.mom/backups.
+// content goes through OpBackup, which moves it under ~/.mom/.state/backups.
 package plan
 
 import (

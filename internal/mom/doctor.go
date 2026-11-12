@@ -24,11 +24,14 @@ type Finding struct {
 	Fix    string `json:"fix,omitempty"`
 }
 
-// Doctor reports how far each agent's config is from ~/.agents, plus things
+// Doctor reports how far each agent's config is from ~/.mom, plus things
 // mom doesn't manage yet. It never changes anything.
 func Doctor(p env.Paths) []Finding {
 	if !Initialized(p) {
-		return []Finding{{LevelError, p.Agents, "not set up yet", "mom init"}}
+		if LegacyInitialized(p) {
+			return []Finding{{LevelError, p.LegacyRoot, "old mom home still in use", "migrate to ~/.mom (see README)"}}
+		}
+		return []Finding{{LevelError, p.Root, "not set up yet", "mom init"}}
 	}
 	var out []Finding
 	links, problems := Desired(p)
@@ -54,14 +57,14 @@ func Doctor(p env.Paths) []Finding {
 			out = append(out, Finding{LevelDrift, l.Path, l.What + ": a copy instead of a link (identical)", "mom sync"})
 		case Conflict:
 			out = append(out, Finding{LevelError, l.Path, l.What + ": replaced by a different copy (an agent or installer rewrote it?)",
-				"`mom adopt " + p.Short(l.Path) + "` keeps it; `mom sync --force` restores ~/.agents"})
+				"`mom adopt " + p.Short(l.Path) + "` keeps it; `mom sync --force` restores ~/.mom"})
 		}
 	}
 	for _, a := range prune(p, links) {
-		out = append(out, Finding{LevelDrift, a.Path, "stale link into ~/.agents", "mom sync"})
+		out = append(out, Finding{LevelDrift, a.Path, "stale link into ~/.mom", "mom sync"})
 	}
 
-	// Skills an agent has that ~/.agents doesn't know about.
+	// Skills an agent has that ~/.mom doesn't know about.
 	for _, dir := range []string{p.ClaudeSkills, p.CodexSkills} {
 		agent := "Claude"
 		if dir == p.CodexSkills {
@@ -73,7 +76,7 @@ func Doctor(p env.Paths) []Finding {
 				continue
 			}
 			if k, _ := fsx.KindOf(path); k == fsx.Link {
-				if t, _ := fsx.LinkTarget(path); p.InAgents(t) {
+				if t, _ := fsx.LinkTarget(path); p.InRoot(t) {
 					continue
 				}
 			}
@@ -85,7 +88,7 @@ func Doctor(p env.Paths) []Finding {
 	for _, n := range fsx.Entries(p.CodexSystemSkills) {
 		if fsx.IsSkillDir(filepath.Join(p.SharedSkills, n)) {
 			out = append(out, Finding{LevelWarn, filepath.Join(p.SharedSkills, n),
-				"same name as a Codex built-in skill", "move it to ~/.agents/claude/skills/, then `mom sync`"})
+				"same name as a Codex built-in skill", "move it to ~/.mom/claude/skills/, then `mom sync`"})
 		}
 	}
 

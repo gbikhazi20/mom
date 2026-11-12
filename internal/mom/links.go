@@ -3,13 +3,14 @@
 // the plans that close the gap (SyncPlan, AdoptPlan, ImportPlan).
 //
 // Everything mom manages is a symlink from an agent's native location into
-// ~/.agents, so edits made through either agent land in the canonical copy.
+// ~/.mom, so edits made through either agent land in the canonical copy.
 package mom
 
 import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/gbikhazi20/mom/internal/env"
 	"github.com/gbikhazi20/mom/internal/fsx"
@@ -47,8 +48,9 @@ func Desired(p env.Paths) ([]Link, []plan.Problem) {
 
 	shared := skillNames(p.SharedSkills)
 	for _, n := range sortedKeys(shared) {
-		// Codex reads ~/.agents/skills natively; only Claude needs a link.
-		links = append(links, Link{filepath.Join(p.ClaudeSkills, n), filepath.Join(p.SharedSkills, n), "skill " + n + " (claude)"})
+		for _, agent := range []struct{ dir, name string }{{p.ClaudeSkills, "claude"}, {p.CodexSkills, "codex"}} {
+			links = append(links, Link{filepath.Join(agent.dir, n), filepath.Join(p.SharedSkills, n), "skill " + n + " (" + agent.name + ")"})
+		}
 	}
 	for _, n := range sortedKeys(skillNames(p.ClaudeOnly)) {
 		if shared[n] {
@@ -120,7 +122,7 @@ func SyncPlan(p env.Paths, force bool) plan.Plan {
 				continue
 			}
 			pl.Problem(l.Path, fmt.Sprintf("differs from %s", p.Short(l.Target)),
-				fmt.Sprintf("`mom adopt %s` keeps this copy; `mom sync --force` keeps the ~/.agents copy", p.Short(l.Path)))
+				fmt.Sprintf("`mom adopt %s` keeps this copy; `mom sync --force` keeps the ~/.mom copy", p.Short(l.Path)))
 		}
 	}
 	pl.Actions = append(pl.Actions, prune(p, links)...)
@@ -147,15 +149,24 @@ func prune(p env.Paths, links []Link) []plan.Action {
 		if k, _ := fsx.KindOf(c); k != fsx.Link {
 			continue
 		}
-		if t, err := fsx.LinkTarget(c); err == nil && p.InAgents(t) {
-			out = append(out, plan.Action{Op: plan.OpUnlink, Path: c, Reason: "no longer in ~/.agents"})
+		if t, err := fsx.LinkTarget(c); err == nil && (p.InRoot(t) || inLegacyMom(t, p.LegacyRoot)) {
+			out = append(out, plan.Action{Op: plan.OpUnlink, Path: c, Reason: "no longer in ~/.mom"})
 		}
 	}
 	return out
 }
 
+func inLegacyMom(path, legacy string) bool {
+	for _, rel := range []string{"skills", "claude/skills", "codex/skills"} {
+		if strings.HasPrefix(path, filepath.Join(legacy, rel)+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return path == filepath.Join(legacy, "instructions", "global.md")
+}
+
 // AdoptPlan makes the native copy at path the canonical one: the current
-// canonical copy is backed up, the native copy moves into ~/.agents, and the
+// canonical copy is backed up, the native copy moves into ~/.mom, and the
 // native path becomes a link again.
 func AdoptPlan(p env.Paths, path string) (plan.Plan, error) {
 	links, _ := Desired(p)
@@ -171,7 +182,7 @@ func AdoptPlan(p env.Paths, path string) (plan.Plan, error) {
 			pl.Add(plan.Action{Op: plan.OpSymlink, Path: l.Path, Target: l.Target, Reason: l.What})
 			return pl, nil
 		default:
-			return plan.Plan{}, fmt.Errorf("%s is %s; adopt only applies to a real file or folder that differs from ~/.agents", p.Short(path), st)
+			return plan.Plan{}, fmt.Errorf("%s is %s; adopt only applies to a real file or folder that differs from ~/.mom", p.Short(path), st)
 		}
 	}
 	return plan.Plan{}, fmt.Errorf("%s is not a path mom manages (see `mom doctor`)", p.Short(path))

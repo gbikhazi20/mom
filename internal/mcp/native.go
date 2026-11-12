@@ -53,8 +53,9 @@ func ReadCodex(path string) (string, map[string]map[string]any, error) {
 }
 
 const (
-	blockStart = "# >>> mom: MCP servers, generated from ~/.agents/mcp/servers.toml (edit there, then `mom sync`) >>>"
-	blockEnd   = "# <<< mom <<<"
+	blockStart       = "# >>> mom: MCP servers, generated from ~/.mom/mcp/servers.toml (edit there, then `mom sync`) >>>"
+	legacyBlockStart = "# >>> mom: MCP servers, generated from ~/.agents/mcp/servers.toml (edit there, then `mom sync`) >>>"
+	blockEnd         = "# <<< mom <<<"
 )
 
 // A table header: [a.b."c"] or [[a.b]]. Excluding , = [ ] from the key keeps
@@ -69,7 +70,7 @@ func RewriteCodex(text string, servers map[string]map[string]any) string {
 	inBlock, skipping := false, false
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == blockStart {
+		if trimmed == blockStart || trimmed == legacyBlockStart {
 			inBlock = true
 			continue
 		}
@@ -102,7 +103,7 @@ func ManagedByBlock(text string) map[string]bool {
 	for _, line := range strings.Split(text, "\n") {
 		t := strings.TrimSpace(line)
 		switch {
-		case t == blockStart:
+		case t == blockStart || t == legacyBlockStart:
 			in = true
 		case t == blockEnd:
 			in = false

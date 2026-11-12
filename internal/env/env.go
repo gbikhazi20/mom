@@ -12,15 +12,16 @@ import (
 type Paths struct {
 	Home string
 
-	// Canonical repo (~/.agents).
-	Agents       string
+	// Canonical repo (~/.mom).
+	Root         string
+	LegacyRoot   string // previous canonical repo (~/.agents), migration detection only
 	GlobalMD     string // instructions/global.md
-	SharedSkills string // skills/ — Codex reads this natively, linked into Claude
+	SharedSkills string // skills/ — linked into both agents
 	ClaudeOnly   string // claude/skills/ — linked into ~/.claude/skills only
 	CodexOnly    string // codex/skills/ — linked into ~/.codex/skills only
 	MCPFile      string // mcp/servers.toml
-	StateDir     string // .mom/ (gitignored)
-	StateFile    string // .mom/state.json
+	StateDir     string // .state/ (gitignored)
+	StateFile    string // .state/state.json
 	BackupsDir   string
 
 	// Claude Code.
@@ -36,7 +37,7 @@ type Paths struct {
 	// Codex.
 	Codex             string
 	CodexAgentsMD     string
-	CodexSkills       string // deprecated user location, still loaded by Codex
+	CodexSkills       string // user skills, including links to shared skills
 	CodexSystemSkills string
 	CodexConfig       string
 	CodexHooks        string
@@ -59,18 +60,19 @@ func Resolve() (Paths, error) {
 }
 
 func ForHome(home string) Paths {
-	agents := filepath.Join(home, ".agents")
+	root := filepath.Join(home, ".mom")
 	claude := filepath.Join(home, ".claude")
 	codex := filepath.Join(home, ".codex")
-	state := filepath.Join(agents, ".mom")
+	state := filepath.Join(root, ".state")
 	return Paths{
 		Home:         home,
-		Agents:       agents,
-		GlobalMD:     filepath.Join(agents, "instructions", "global.md"),
-		SharedSkills: filepath.Join(agents, "skills"),
-		ClaudeOnly:   filepath.Join(agents, "claude", "skills"),
-		CodexOnly:    filepath.Join(agents, "codex", "skills"),
-		MCPFile:      filepath.Join(agents, "mcp", "servers.toml"),
+		Root:         root,
+		LegacyRoot:   filepath.Join(home, ".agents"),
+		GlobalMD:     filepath.Join(root, "instructions", "global.md"),
+		SharedSkills: filepath.Join(root, "skills"),
+		ClaudeOnly:   filepath.Join(root, "claude", "skills"),
+		CodexOnly:    filepath.Join(root, "codex", "skills"),
+		MCPFile:      filepath.Join(root, "mcp", "servers.toml"),
 		StateDir:     state,
 		StateFile:    filepath.Join(state, "state.json"),
 		BackupsDir:   filepath.Join(state, "backups"),
@@ -93,7 +95,7 @@ func ForHome(home string) Paths {
 		CodexRules:        filepath.Join(codex, "rules", "mom.rules"),
 		CodexSessions:     filepath.Join(codex, "sessions"),
 		CodexIndex:        filepath.Join(codex, "session_index.jsonl"),
-		MemoryDir:         filepath.Join(agents, "memory"),
+		MemoryDir:         filepath.Join(root, "memory"),
 	}
 }
 
@@ -108,7 +110,7 @@ func (p Paths) Short(path string) string {
 	return path
 }
 
-// InAgents reports whether path lives inside the canonical repo.
-func (p Paths) InAgents(path string) bool {
-	return path == p.Agents || strings.HasPrefix(path, p.Agents+string(filepath.Separator))
+// InRoot reports whether path lives inside the canonical repo.
+func (p Paths) InRoot(path string) bool {
+	return path == p.Root || strings.HasPrefix(path, p.Root+string(filepath.Separator))
 }

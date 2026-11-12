@@ -32,7 +32,7 @@ func fixture(t *testing.T) env.Paths {
 	write(t, filepath.Join(p.ClaudeSkills, "context7-mcp", "nested", "info.md"), "Hey Claude")
 	skill(t, filepath.Join(p.SharedSkills, "context7-mcp"), "c7") // differs: no nested/
 	skill(t, filepath.Join(p.ClaudeSkills, "write-bench-task"), "wbt")
-	skill(t, filepath.Join(p.CodexSkills, "write-bench-task"), "wbt") // duplicate in deprecated dir
+	skill(t, filepath.Join(p.CodexSkills, "write-bench-task"), "wbt") // duplicate native copy
 	skill(t, filepath.Join(p.ClaudeSkills, "skill-creator"), "anthropic")
 	skill(t, filepath.Join(p.CodexSystemSkills, "skill-creator"), "openai")
 	if err := os.MkdirAll(filepath.Join(p.ClaudeSkills, "synced", "bucket"), 0o755); err != nil {
@@ -74,9 +74,8 @@ func TestInitImportsAndLinks(t *testing.T) {
 	assertLink(t, filepath.Join(p.ClaudeSkills, "grilling"), filepath.Join(p.SharedSkills, "grilling"))
 	assertLink(t, filepath.Join(p.ClaudeSkills, "rex"), filepath.Join(p.SharedSkills, "rex"))
 	assertLink(t, filepath.Join(p.ClaudeSkills, "write-bench-task"), filepath.Join(p.SharedSkills, "write-bench-task"))
-	if k, _ := fsx.KindOf(filepath.Join(p.CodexSkills, "write-bench-task")); k != fsx.Missing {
-		t.Error("codex duplicate should be removed (Codex reads ~/.agents/skills)")
-	}
+	assertLink(t, filepath.Join(p.CodexSkills, "write-bench-task"), filepath.Join(p.SharedSkills, "write-bench-task"))
+	assertLink(t, filepath.Join(p.CodexSkills, "rex"), filepath.Join(p.SharedSkills, "rex"))
 	assertLink(t, filepath.Join(p.ClaudeSkills, "skill-creator"), filepath.Join(p.ClaudeOnly, "skill-creator"))
 	assertLink(t, filepath.Join(p.ClaudeSkills, "kickflip"), filepath.Join(p.SharedSkills, "kickflip"))
 	if !fsx.IsSkillDir(filepath.Join(p.ClaudeSkills, "kickflip-hooks", "..", "kickflip")) {
@@ -115,6 +114,20 @@ func TestInitImportsAndLinks(t *testing.T) {
 	again := ImportPlan(p)
 	if len(again.Actions) != 0 {
 		t.Fatalf("init not idempotent: %+v", again.Actions)
+	}
+}
+
+func TestLegacyHomeDetectionLeavesCodexFilesAlone(t *testing.T) {
+	p := env.ForHome(t.TempDir())
+	write(t, filepath.Join(p.LegacyRoot, ".skill-lock.json"), "{}")
+	if LegacyInitialized(p) {
+		t.Fatal("Codex's own ~/.agents is not an old mom home")
+	}
+	write(t, filepath.Join(p.LegacyRoot, "instructions", "global.md"), "old")
+	write(t, filepath.Join(p.LegacyRoot, "skills", "example", "SKILL.md"), "old")
+	write(t, filepath.Join(p.LegacyRoot, ".mom", "state.json"), "{}")
+	if !LegacyInitialized(p) {
+		t.Fatal("old mom home not detected")
 	}
 }
 

@@ -1,5 +1,5 @@
 // Package mcp translates between the canonical MCP server list
-// (~/.agents/mcp/servers.toml) and each agent's native format:
+// (~/.mom/mcp/servers.toml) and each agent's native format:
 // Claude Code's JSON entries (user scope in ~/.claude.json) and Codex's
 // [mcp_servers.*] tables in ~/.codex/config.toml.
 package mcp

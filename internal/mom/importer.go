@@ -10,22 +10,22 @@ import (
 	"github.com/gbikhazi20/mom/internal/plan"
 )
 
-// ImportPlan sets up ~/.agents and pulls in whatever each agent has that the
+// ImportPlan sets up ~/.mom and pulls in whatever each agent has that the
 // canonical repo doesn't yet. It is safe to re-run: anything already managed
 // is skipped. Run SyncPlan afterwards to create the links.
 func ImportPlan(p env.Paths) plan.Plan {
 	var pl plan.Plan
 
-	for _, d := range []string{p.Agents, filepath.Dir(p.GlobalMD), p.SharedSkills, p.ClaudeOnly, p.CodexOnly} {
+	for _, d := range []string{p.Root, filepath.Dir(p.GlobalMD), p.SharedSkills, p.ClaudeOnly, p.CodexOnly} {
 		if !fsx.Exists(d) {
 			pl.Add(plan.Action{Op: plan.OpMkdir, Path: d})
 		}
 	}
-	if gi := filepath.Join(p.Agents, ".gitignore"); !fsx.Exists(gi) {
-		pl.Add(plan.Action{Op: plan.OpWrite, Path: gi, Content: ".mom/\n.DS_Store\n"})
+	if gi := filepath.Join(p.Root, ".gitignore"); !fsx.Exists(gi) {
+		pl.Add(plan.Action{Op: plan.OpWrite, Path: gi, Content: ".state/\n.DS_Store\n"})
 	}
-	if !fsx.Exists(filepath.Join(p.Agents, ".git")) {
-		pl.Add(plan.Action{Op: plan.OpGitInit, Path: p.Agents})
+	if !fsx.Exists(filepath.Join(p.Root, ".git")) {
+		pl.Add(plan.Action{Op: plan.OpGitInit, Path: p.Root})
 	}
 
 	global := importInstructions(p, &pl)
@@ -88,7 +88,7 @@ func importRules(p env.Paths, global string, pl *plan.Plan) {
 }
 
 type canonSkill struct {
-	path    string // where it lives (or will live) in ~/.agents
+	path    string // where it lives (or will live) in ~/.mom
 	compare string // where its content can be read right now
 }
 
@@ -119,7 +119,7 @@ func importSkills(p env.Paths, pl *plan.Plan) {
 			var linkTarget string
 			if kind == fsx.Link {
 				linkTarget, _ = fsx.LinkTarget(path)
-				if p.InAgents(linkTarget) {
+				if p.InRoot(linkTarget) {
 					continue // already managed
 				}
 			}
@@ -135,7 +135,7 @@ func importSkills(p env.Paths, pl *plan.Plan) {
 				}
 				fix := "delete one copy by hand, then re-run `mom init`"
 				if src.agent == "claude" {
-					fix = "after `mom init --apply`: `mom adopt " + p.Short(path) + "` keeps this copy, `mom sync --force` keeps the ~/.agents copy"
+					fix = "after `mom init --apply`: `mom adopt " + p.Short(path) + "` keeps this copy, `mom sync --force` keeps the ~/.mom copy"
 				}
 				pl.Problem(path, "differs from "+p.Short(existing.path), fix)
 				continue
@@ -148,7 +148,7 @@ func importSkills(p env.Paths, pl *plan.Plan) {
 			dest := filepath.Join(destDir, n)
 			if kind == fsx.Link {
 				pl.Add(plan.Action{Op: plan.OpSymlink, Path: dest, Target: linkTarget, Reason: "external skill; " + reason})
-				pl.Add(plan.Action{Op: plan.OpUnlink, Path: path, Reason: "relinked through ~/.agents by sync"})
+				pl.Add(plan.Action{Op: plan.OpUnlink, Path: path, Reason: "relinked through ~/.mom by sync"})
 			} else {
 				pl.Add(plan.Action{Op: plan.OpMove, Path: path, Target: dest, Reason: reason})
 			}
@@ -166,8 +166,16 @@ func containsAny(parts []string, text string) bool {
 	return false
 }
 
-// Initialized reports whether ~/.agents has been set up by mom.
+// Initialized reports whether ~/.mom has been set up by mom.
 func Initialized(p env.Paths) bool {
-	_, err := os.Stat(filepath.Join(p.Agents, ".gitignore"))
+	_, err := os.Stat(filepath.Join(p.Root, ".gitignore"))
 	return err == nil && fsx.Exists(p.SharedSkills)
+}
+
+// LegacyInitialized reports an old mom home without treating Codex's own
+// ~/.agents directory as mom-owned when the old layout is absent.
+func LegacyInitialized(p env.Paths) bool {
+	return fsx.Exists(filepath.Join(p.LegacyRoot, "instructions", "global.md")) &&
+		fsx.Exists(filepath.Join(p.LegacyRoot, "skills")) &&
+		fsx.Exists(filepath.Join(p.LegacyRoot, ".mom"))
 }

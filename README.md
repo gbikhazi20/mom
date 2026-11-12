@@ -3,7 +3,7 @@
 One home for the config, memory and sessions of your coding agents. mom keeps
 [Claude Code](https://claude.com/claude-code) and
 [Codex](https://github.com/openai/codex) in sync from a single directory,
-`~/.agents`, so instructions, skills, MCP servers and memories are written once
+`~/.mom`, so instructions, skills, MCP servers and memories are written once
 and both agents see them.
 
 > Early and opinionated: built for one person's setup. macOS only for now
@@ -20,18 +20,29 @@ Requires Go 1.27 or later.
 ## Quick start
 
 ```sh
-mom init            # dry run: shows what would be imported into ~/.agents
+mom init            # dry run: shows what would be imported into ~/.mom
 mom init --apply    # import your existing Claude and Codex config
 mom sync            # link everything into both agents
 mom doctor          # check for drift (exit 1 if something needs attention)
 ```
 
-`~/.agents` is a plain directory; keeping it in git is a good idea. Anything mom
-replaces is backed up to `~/.agents/.mom/backups/`.
+`~/.mom` is a plain directory; keeping it in git is a good idea. Anything mom
+replaces is backed up to `~/.mom/.state/backups/`.
+
+### Moving an older installation
+
+Move mom's `instructions/`, `skills/`, `claude/`, `codex/`, `mcp/`, and
+`memory/` directories from `~/.agents` to `~/.mom`. Move the old `.mom/`
+directory to `~/.mom/.state/`, and move `.git/` and `.gitignore` to preserve
+the config repo. Update `.gitignore` to ignore `.state/` instead of `.mom/`.
+Leave `.skill-lock.json` in `~/.agents`: it belongs to Codex. If the old repo
+tracked it, remove it from the new repo's index with
+`git -C ~/.mom rm --cached --ignore-unmatch .skill-lock.json`.
+Then run `mom sync` and `mom doctor` to repoint the agent links and MCP block.
 
 ## What it syncs
 
-| In `~/.agents`                 | Becomes                                                          |
+| In `~/.mom`                 | Becomes                                                          |
 | ------------------------------ | ---------------------------------------------------------------- |
 | `instructions/global.md`       | `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` (symlinks)        |
 | `skills/<name>/`               | a skill in both agents                                           |
@@ -40,7 +51,7 @@ replaces is backed up to `~/.agents/.mom/backups/`.
 | `mcp/servers.toml`             | MCP servers in `~/.claude.json` (user scope) and `~/.codex/config.toml` |
 | `memory/`                      | shared memory, loaded into every session by hooks                |
 
-If an agent's copy of something has diverged from `~/.agents`, `mom doctor`
+If an agent's copy of something has diverged from `~/.mom`, `mom doctor`
 reports it, and `mom adopt <path>` makes that copy the canonical one.
 
 ### MCP servers and secrets
@@ -57,7 +68,7 @@ args = ["-y", "some-mcp-server"]
 only = "claude"          # optional: limit to one agent
 ```
 
-Secrets are never written to `~/.agents`. Store them in Keychain with
+Secrets are never written to `~/.mom`. Store them in Keychain with
 `mom secret set NAME` and reference them as `${secret:NAME}`; `mom sync`
 fills them in. `mom secret ls` shows which referenced secrets are missing.
 
@@ -81,8 +92,8 @@ mom mem ls
   at most once per conversation.
 - `mom mem import-claude` imports Claude Code's built-in memories.
 
-The files live in `~/.agents/memory/user/` and
-`~/.agents/memory/projects/<repo-id>/`, so plain `grep` works on them too.
+The files live in `~/.mom/memory/user/` and
+`~/.mom/memory/projects/<repo-id>/`, so plain `grep` works on them too.
 
 ## Sessions
 

@@ -1,4 +1,4 @@
-// Package secrets stores values that must never land in the ~/.agents repo
+// Package secrets stores values that must never land in the ~/.mom repo
 // (API keys, tokens). Config refers to them as ${secret:NAME}; mom resolves
 // the references when it writes each agent's native config.
 //

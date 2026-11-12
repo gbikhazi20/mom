@@ -3,8 +3,8 @@
 // frontmatter; each scope keeps a generated INDEX.md that is loaded into
 // every session by a SessionStart hook.
 //
-//	~/.agents/memory/user/<name>.md               applies everywhere
-//	~/.agents/memory/projects/<project>/<name>.md  applies in one repo
+//	~/.mom/memory/user/<name>.md               applies everywhere
+//	~/.mom/memory/projects/<project>/<name>.md  applies in one repo
 package memory
 
 import (

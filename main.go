@@ -1,4 +1,4 @@
-// mom keeps Claude Code and Codex in sync from one canonical repo (~/.agents).
+// mom keeps Claude Code and Codex in sync from one canonical repo (~/.mom).
 package main
 
 import (
@@ -17,11 +17,11 @@ import (
 	"github.com/gbikhazi20/mom/internal/secrets"
 )
 
-const usage = `mom keeps Claude Code and Codex in sync from ~/.agents.
+const usage = `mom keeps Claude Code and Codex in sync from ~/.mom.
 
 Usage:
-  mom init   [--apply] [--json]          set up ~/.agents and import existing config (dry run unless --apply)
-  mom sync   [--dry-run] [--force] [--json]  link everything in ~/.agents into both agents
+  mom init   [--apply] [--json]          set up ~/.mom and import existing config (dry run unless --apply)
+  mom sync   [--dry-run] [--force] [--json]  link everything in ~/.mom into both agents
   mom doctor [--all] [--json]            show drift, conflicts, and unmanaged config (exit 1 if action needed)
   mom adopt  <path> [--dry-run] [--json] make an agent's diverged copy the canonical one
   mom mem ...                            shared memory (see: mom mem help)
@@ -31,13 +31,13 @@ Usage:
   mom secret ls [--json]                 secrets servers.toml references, and whether each is stored
 
 Canonical layout:
-  ~/.agents/instructions/global.md   -> ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md
-  ~/.agents/skills/<name>            both agents (Codex reads it directly)
-  ~/.agents/claude/skills/<name>     Claude only
-  ~/.agents/codex/skills/<name>      Codex only
-  ~/.agents/mcp/servers.toml         -> ~/.claude.json (user scope), ~/.codex/config.toml
-  ~/.agents/memory/                  shared memory, loaded by a SessionStart hook in both agents
-  ~/.agents/.mom/backups/            anything mom replaced
+  ~/.mom/instructions/global.md   -> ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md
+  ~/.mom/skills/<name>            -> ~/.claude/skills/<name>, ~/.codex/skills/<name>
+  ~/.mom/claude/skills/<name>     Claude only
+  ~/.mom/codex/skills/<name>      Codex only
+  ~/.mom/mcp/servers.toml         -> ~/.claude.json (user scope), ~/.codex/config.toml
+  ~/.mom/memory/                  shared memory, loaded by a SessionStart hook in both agents
+  ~/.mom/.state/backups/            anything mom replaced
 `
 
 func main() {
@@ -104,6 +104,9 @@ func runInit(p env.Paths, args []string) int {
 	apply := fs.Bool("apply", false, "make the changes")
 	asJSON := fs.Bool("json", false, "JSON output")
 	fs.Parse(args)
+	if !mom.Initialized(p) && mom.LegacyInitialized(p) {
+		fail(fmt.Errorf("old mom home at ~/.agents; migrate it to ~/.mom before running init (see README)"))
+	}
 
 	imp := mom.ImportPlan(p)
 	imp.Extend(mom.MCPImportPlan(p, secrets.Default()))
@@ -114,7 +117,7 @@ func runInit(p env.Paths, args []string) int {
 		fmt.Println("mom init (dry run)")
 		imp.Print(os.Stdout, p)
 		fmt.Println("\nthen `mom sync` links everything into ~/.claude and ~/.codex.")
-		fmt.Println("re-run with --apply to do it. anything replaced is moved to ~/.agents/.mom/backups/.")
+		fmt.Println("re-run with --apply to do it. anything replaced is moved to ~/.mom/.state/backups/.")
 		return 0
 	}
 	backup1, err := imp.Apply(p, runtime())
@@ -142,12 +145,15 @@ func runInit(p env.Paths, args []string) int {
 func runSync(p env.Paths, args []string) int {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
 	dry := fs.Bool("dry-run", false, "show what would change")
-	force := fs.Bool("force", false, "on conflict, back up the agent's copy and use ~/.agents")
+	force := fs.Bool("force", false, "on conflict, back up the agent's copy and use ~/.mom")
 	asJSON := fs.Bool("json", false, "JSON output")
 	fs.Parse(args)
 
 	if !mom.Initialized(p) {
-		fail(fmt.Errorf("~/.agents isn't set up yet; run `mom init`"))
+		if mom.LegacyInitialized(p) {
+			fail(fmt.Errorf("old mom home at ~/.agents; migrate it to ~/.mom before running sync (see README)"))
+		}
+		fail(fmt.Errorf("~/.mom isn't set up yet; run `mom init`"))
 	}
 	pl := syncPlan(p, *force)
 	if *dry {

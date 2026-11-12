@@ -22,7 +22,7 @@ const memUsage = `mom mem — memory shared by Claude Code and Codex
   mom mem ls [--all] [--json]           user + current repo (or every project)
   mom mem search <words...> [--all] [--json]
   mom mem show <name> [--json]
-  mom mem rm <name>                     (moved to ~/.agents/.mom/backups)
+  mom mem rm <name>                     (moved to ~/.mom/.state/backups)
   mom mem mv <name> --user | --project ID
   mom mem context [--hook] [--cwd DIR]  what the SessionStart hook injects
   mom mem recall [<prompt>] [--hook] [--json]   memories matching a prompt (UserPromptSubmit hook)

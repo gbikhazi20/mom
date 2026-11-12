@@ -146,6 +146,25 @@ func TestMCPImportAndSync(t *testing.T) {
 	assertHealthy(t, e)
 }
 
+func TestLegacyMCPBlockIsReplaced(t *testing.T) {
+	e := mcpFixture(t)
+	e.initAndSync(t)
+	before, err := os.ReadFile(e.p.CodexConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := strings.Replace(string(before), "generated from ~/.mom/mcp/", "generated from ~/.agents/mcp/", 1)
+	write(t, e.p.CodexConfig, legacy)
+	e.apply(t, MCPSyncPlan(e.p, e.store))
+	after, err := os.ReadFile(e.p.CodexConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(after), "[mcp_servers.context7]") != 1 || strings.Contains(string(after), "generated from ~/.agents/mcp/") {
+		t.Fatalf("legacy block was not replaced cleanly:\n%s", after)
+	}
+}
+
 func TestMCPAddRemoveAndMissingSecret(t *testing.T) {
 	e := mcpFixture(t)
 	e.initAndSync(t)
