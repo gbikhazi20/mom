@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"mom/internal/env"
 	"mom/internal/mom"
 	"mom/internal/plan"
+	"mom/internal/secrets"
 )
 
 const usage = `mom keeps Claude Code and Codex in sync from ~/.agents.
@@ -21,12 +24,15 @@ Usage:
   mom sync   [--dry-run] [--force] [--json]  link everything in ~/.agents into both agents
   mom doctor [--all] [--json]            show drift, conflicts, and unmanaged config (exit 1 if action needed)
   mom adopt  <path> [--dry-run] [--json] make an agent's diverged copy the canonical one
+  mom secret set <NAME> [value]          store a secret in Keychain (reads stdin if no value)
+  mom secret ls [--json]                 secrets servers.toml references, and whether each is stored
 
 Canonical layout:
   ~/.agents/instructions/global.md   -> ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md
   ~/.agents/skills/<name>            both agents (Codex reads it directly)
   ~/.agents/claude/skills/<name>     Claude only
   ~/.agents/codex/skills/<name>      Codex only
+  ~/.agents/mcp/servers.toml         -> ~/.claude.json (user scope), ~/.codex/config.toml
   ~/.agents/.mom/backups/            anything mom replaced
 `
 
@@ -49,12 +55,24 @@ func main() {
 		os.Exit(runDoctor(paths, args))
 	case "adopt":
 		os.Exit(runAdopt(paths, args))
+	case "secret":
+		os.Exit(runSecret(paths, args))
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
 		fmt.Fprintf(os.Stderr, "mom: unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
 	}
+}
+
+func runtime() plan.Runtime {
+	return plan.Runtime{Secrets: secrets.Default(), ClaudeBin: os.Getenv("MOM_CLAUDE_BIN")}
+}
+
+func syncPlan(p env.Paths, force bool) plan.Plan {
+	pl := mom.SyncPlan(p, force)
+	pl.Extend(mom.MCPSyncPlan(p, secrets.Default()))
+	return pl
 }
 
 func runInit(p env.Paths, args []string) int {
@@ -64,6 +82,7 @@ func runInit(p env.Paths, args []string) int {
 	fs.Parse(args)
 
 	imp := mom.ImportPlan(p)
+	imp.Extend(mom.MCPImportPlan(p, secrets.Default()))
 	if !*apply {
 		if *asJSON {
 			return emit(map[string]any{"applied": false, "import": imp})
@@ -74,12 +93,12 @@ func runInit(p env.Paths, args []string) int {
 		fmt.Println("re-run with --apply to do it. anything replaced is moved to ~/.agents/.mom/backups/.")
 		return 0
 	}
-	backup1, err := imp.Apply(p)
+	backup1, err := imp.Apply(p, runtime())
 	if err != nil {
 		return report(p, *asJSON, "import", imp, backup1, err)
 	}
-	sync := mom.SyncPlan(p, false)
-	backup2, err := sync.Apply(p)
+	sync := syncPlan(p, false)
+	backup2, err := sync.Apply(p, runtime())
 	if *asJSON {
 		return emit(map[string]any{"applied": err == nil, "import": imp, "sync": sync,
 			"backups": nonEmpty(backup1, backup2), "error": errString(err)})
@@ -106,7 +125,7 @@ func runSync(p env.Paths, args []string) int {
 	if !mom.Initialized(p) {
 		fail(fmt.Errorf("~/.agents isn't set up yet; run `mom init`"))
 	}
-	pl := mom.SyncPlan(p, *force)
+	pl := syncPlan(p, *force)
 	if *dry {
 		if *asJSON {
 			return emit(map[string]any{"applied": false, "sync": pl})
@@ -114,7 +133,7 @@ func runSync(p env.Paths, args []string) int {
 		pl.Print(os.Stdout, p)
 		return 0
 	}
-	backup, err := pl.Apply(p)
+	backup, err := pl.Apply(p, runtime())
 	return report(p, *asJSON, "sync", pl, backup, err)
 }
 
@@ -125,6 +144,9 @@ func runDoctor(p env.Paths, args []string) int {
 	fs.Parse(args)
 
 	findings := mom.Doctor(p)
+	if mom.Initialized(p) {
+		findings = append(findings, mom.MCPDoctor(p, secrets.Default())...)
+	}
 	healthy := mom.Healthy(findings)
 	if *asJSON {
 		emit(map[string]any{"healthy": healthy, "findings": findings})
@@ -178,8 +200,83 @@ func runAdopt(p env.Paths, args []string) int {
 		pl.Print(os.Stdout, p)
 		return 0
 	}
-	backup, err := pl.Apply(p)
+	backup, err := pl.Apply(p, runtime())
 	return report(p, *asJSON, "adopt", pl, backup, err)
+}
+
+func runSecret(p env.Paths, args []string) int {
+	if len(args) == 0 {
+		fail(fmt.Errorf("usage: mom secret set <NAME> [value] | mom secret ls"))
+	}
+	store := secrets.Default()
+	switch args[0] {
+	case "set":
+		if len(args) < 2 {
+			fail(fmt.Errorf("usage: mom secret set <NAME> [value]"))
+		}
+		value := ""
+		if len(args) >= 3 {
+			value = args[2]
+		} else {
+			b, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				fail(err)
+			}
+			value = strings.TrimRight(string(b), "\r\n")
+		}
+		if value == "" {
+			fail(fmt.Errorf("empty value"))
+		}
+		if err := store.Set(args[1], value); err != nil {
+			fail(err)
+		}
+		fmt.Printf("stored %s; run `mom sync` to push it to both agents\n", args[1])
+		return 0
+	case "ls":
+		asJSON := len(args) > 1 && args[1] == "--json"
+		refs := mom.SecretRefs(p)
+		type row struct {
+			Name   string   `json:"name"`
+			Stored bool     `json:"stored"`
+			UsedBy []string `json:"used_by"`
+		}
+		var rows []row
+		missing := false
+		for _, name := range sortedKeys(refs) {
+			_, err := store.Get(name)
+			rows = append(rows, row{name, err == nil, refs[name]})
+			missing = missing || err != nil
+		}
+		if asJSON {
+			emit(rows)
+		} else {
+			for _, r := range rows {
+				status := "stored"
+				if !r.Stored {
+					status = "MISSING"
+				}
+				fmt.Printf("%-28s %-8s %s\n", r.Name, status, strings.Join(r.UsedBy, ", "))
+			}
+			if len(rows) == 0 {
+				fmt.Println("servers.toml references no secrets")
+			}
+		}
+		if missing {
+			return 1
+		}
+		return 0
+	}
+	fail(fmt.Errorf("unknown secret command %q", args[0]))
+	return 2
+}
+
+func sortedKeys[T any](m map[string]T) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // --- helpers ---

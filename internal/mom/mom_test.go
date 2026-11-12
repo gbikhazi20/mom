@@ -188,7 +188,7 @@ func TestDriftAndPrune(t *testing.T) {
 
 func mustApply(t *testing.T, p env.Paths, pl plan.Plan) {
 	t.Helper()
-	if _, err := pl.Apply(p); err != nil {
+	if _, err := pl.Apply(p, plan.Runtime{}); err != nil {
 		t.Fatal(err)
 	}
 }

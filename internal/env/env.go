@@ -18,7 +18,9 @@ type Paths struct {
 	SharedSkills string // skills/ — Codex reads this natively, linked into Claude
 	ClaudeOnly   string // claude/skills/ — linked into ~/.claude/skills only
 	CodexOnly    string // codex/skills/ — linked into ~/.codex/skills only
+	MCPFile      string // mcp/servers.toml
 	StateDir     string // .mom/ (gitignored)
+	StateFile    string // .mom/state.json
 	BackupsDir   string
 
 	// Claude Code.
@@ -26,12 +28,14 @@ type Paths struct {
 	ClaudeMD     string
 	ClaudeSkills string
 	ClaudeRules  string
+	ClaudeJSON   string // ~/.claude.json (user-scope MCP servers live here)
 
 	// Codex.
 	Codex             string
 	CodexAgentsMD     string
 	CodexSkills       string // deprecated user location, still loaded by Codex
 	CodexSystemSkills string
+	CodexConfig       string
 }
 
 func Resolve() (Paths, error) {
@@ -58,18 +62,22 @@ func ForHome(home string) Paths {
 		SharedSkills: filepath.Join(agents, "skills"),
 		ClaudeOnly:   filepath.Join(agents, "claude", "skills"),
 		CodexOnly:    filepath.Join(agents, "codex", "skills"),
+		MCPFile:      filepath.Join(agents, "mcp", "servers.toml"),
 		StateDir:     state,
+		StateFile:    filepath.Join(state, "state.json"),
 		BackupsDir:   filepath.Join(state, "backups"),
 
 		Claude:       claude,
 		ClaudeMD:     filepath.Join(claude, "CLAUDE.md"),
 		ClaudeSkills: filepath.Join(claude, "skills"),
 		ClaudeRules:  filepath.Join(claude, "rules"),
+		ClaudeJSON:   filepath.Join(home, ".claude.json"),
 
 		Codex:             codex,
 		CodexAgentsMD:     filepath.Join(codex, "AGENTS.md"),
 		CodexSkills:       filepath.Join(codex, "skills"),
 		CodexSystemSkills: filepath.Join(codex, "skills", ".system"),
+		CodexConfig:       filepath.Join(codex, "config.toml"),
 	}
 }
 

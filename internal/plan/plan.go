@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -25,7 +26,22 @@ const (
 	OpUnlink  Op = "unlink"  // remove a symlink (never a real file)
 	OpSymlink Op = "symlink" // create Path -> Target
 	OpGitInit Op = "git-init"
+	OpAppend  Op = "append"  // append Content to Path
+	OpReplace Op = "replace" // back up a copy of Path, then write Content atomically
+	OpState   Op = "state"   // overwrite mom's own state file with Content
+
+	OpSecretSet       Op = "secret"            // store Content under name Path
+	OpClaudeMCPAdd    Op = "claude-mcp-add"    // `claude mcp add-json -s user Path Content`
+	OpClaudeMCPRemove Op = "claude-mcp-remove" // `claude mcp remove -s user Path`
 )
+
+// Runtime is what Apply needs beyond the filesystem.
+type Runtime struct {
+	Secrets interface {
+		Set(name, value string) error
+	}
+	ClaudeBin string // defaults to "claude"
+}
 
 type Action struct {
 	Op      Op     `json:"op"`
@@ -80,15 +96,15 @@ func (p Plan) Print(w io.Writer, paths env.Paths) {
 
 // Apply runs the actions in order and stops at the first error. It returns
 // the backup directory used (empty if nothing was backed up).
-func (p Plan) Apply(paths env.Paths) (string, error) {
+func (p Plan) Apply(paths env.Paths, rt Runtime) (string, error) {
 	stamp := time.Now().Format("20060102-150405")
 	backupRoot := filepath.Join(paths.BackupsDir, stamp)
 	used := false
 	for _, a := range p.Actions {
-		if err := apply(a, paths, backupRoot); err != nil {
+		if err := apply(a, paths, rt, backupRoot); err != nil {
 			return backupRoot, fmt.Errorf("%s %s: %w", a.Op, paths.Short(a.Path), err)
 		}
-		if a.Op == OpBackup {
+		if a.Op == OpBackup || a.Op == OpReplace {
 			used = true
 		}
 	}
@@ -98,7 +114,10 @@ func (p Plan) Apply(paths env.Paths) (string, error) {
 	return backupRoot, nil
 }
 
-func apply(a Action, paths env.Paths, backupRoot string) error {
+func apply(a Action, paths env.Paths, rt Runtime, backupRoot string) error {
+	backupPath := func(path string) string {
+		return filepath.Join(backupRoot, strings.TrimPrefix(paths.Short(path), "~/"))
+	}
 	switch a.Op {
 	case OpMkdir:
 		return os.MkdirAll(a.Path, 0o755)
@@ -116,8 +135,38 @@ func apply(a Action, paths env.Paths, backupRoot string) error {
 		}
 		return fsx.Move(a.Path, a.Target)
 	case OpBackup:
-		rel := strings.TrimPrefix(paths.Short(a.Path), "~/")
-		return fsx.Move(a.Path, filepath.Join(backupRoot, rel))
+		return fsx.Move(a.Path, backupPath(a.Path))
+	case OpAppend:
+		f, err := os.OpenFile(a.Path, os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = f.WriteString(a.Content)
+		return err
+	case OpReplace:
+		if fsx.Exists(a.Path) {
+			if err := fsx.CopyFile(a.Path, backupPath(a.Path)); err != nil {
+				return err
+			}
+		} else if err := os.MkdirAll(filepath.Dir(a.Path), 0o755); err != nil {
+			return err
+		}
+		return fsx.WriteAtomic(a.Path, []byte(a.Content))
+	case OpState:
+		if err := os.MkdirAll(filepath.Dir(a.Path), 0o755); err != nil {
+			return err
+		}
+		return fsx.WriteAtomic(a.Path, []byte(a.Content))
+	case OpSecretSet:
+		if rt.Secrets == nil {
+			return fmt.Errorf("no secret store")
+		}
+		return rt.Secrets.Set(a.Path, a.Content)
+	case OpClaudeMCPAdd:
+		return runClaude(rt, "mcp", "add-json", "-s", "user", a.Path, a.Content)
+	case OpClaudeMCPRemove:
+		return runClaude(rt, "mcp", "remove", "-s", "user", a.Path)
 	case OpUnlink:
 		if k, _ := fsx.KindOf(a.Path); k != fsx.Link {
 			return fmt.Errorf("not a symlink; refusing to remove")
@@ -132,4 +181,17 @@ func apply(a Action, paths env.Paths, backupRoot string) error {
 		return gitInit(a.Path)
 	}
 	return fmt.Errorf("unknown op %q", a.Op)
+}
+
+func runClaude(rt Runtime, args ...string) error {
+	bin := rt.ClaudeBin
+	if bin == "" {
+		bin = "claude"
+	}
+	out, err := exec.Command(bin, args...).CombinedOutput()
+	if err != nil {
+		// args may contain resolved secrets, so only the subcommand is shown.
+		return fmt.Errorf("claude %s %s: %v: %s", args[0], args[1], err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
