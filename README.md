@@ -80,9 +80,17 @@ Memories are small markdown files that both agents read and write through
 ```sh
 mom mem add bench-flakes --type project \
   --desc "bench trials are flaky in CI" --body "..."
+mom mem edit bench-flakes --append "Fixed by pinning the seed (2026-11-12)."
+mom mem edit bench-flakes --replace "flaky in CI" --with "flaky in CI on arm64"
 mom mem search bench flaky
 mom mem ls
 ```
+
+`add` only creates; `edit` changes just what you name, so agents working at
+the same time don't erase each other's changes. A whole-body rewrite
+(`--body`) must pass `--base <version>` from `mom mem show`, and is refused if
+the memory changed since. Each edit keeps the previous version in
+`~/.mom/.state/backups/`.
 
 - **User memories** (`--user`) apply everywhere; the rest belong to the current
   git repo. Every worktree and clone of the same remote shares them.

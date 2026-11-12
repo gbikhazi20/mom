@@ -33,6 +33,9 @@ type Memory struct {
 	Body        string `json:"body,omitempty"`
 	Scope       Scope  `json:"scope"`
 	Path        string `json:"path,omitempty"`
+	// Version identifies this exact content; edits that rewrite the whole
+	// body must pass the version they read (see Edit).
+	Version string `json:"version,omitempty"`
 }
 
 // Scope is "user" or a project ID.
@@ -95,11 +98,13 @@ func (st Store) read(path string, s Scope) (Memory, error) {
 		m.Name = strings.TrimSuffix(filepath.Base(path), ".md")
 	}
 	m.Scope, m.Path = s, path
+	m.Version = m.version()
 	return m, nil
 }
 
-// Save creates or updates a memory and refreshes its scope's index.
-// Updating keeps the original created date.
+// Save writes a memory whether or not it exists and refreshes its scope's
+// index, keeping the original created date. Agent-facing writes go through
+// Create and Edit, which don't overwrite blindly.
 func (st Store) Save(m Memory) (Memory, error) {
 	m.Name = Slug(m.Name)
 	if m.Name == "" {
@@ -128,6 +133,7 @@ func (st Store) Save(m Memory) (Memory, error) {
 	if err := fsx.WriteAtomic(m.Path, []byte(Format(m))); err != nil {
 		return m, err
 	}
+	m.Version = m.version()
 	return m, st.Reindex(m.Scope)
 }
 

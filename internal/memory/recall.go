@@ -178,7 +178,7 @@ func FormatRecall(rs []Recalled) string {
 		if len(body) > recallBodyLimit {
 			body = body[:recallBodyLimit] + fmt.Sprintf("\n[... truncated; `mom mem show %s` for the rest]", m.Name)
 		}
-		fmt.Fprintf(&b, "\n## %s (%s, %s, updated %s)\n%s\n\n%s\n", m.Name, m.Type, m.Scope, m.Updated, m.Description, body)
+		fmt.Fprintf(&b, "\n## %s (%s, %s, updated %s, version %s)\n%s\n\n%s\n", m.Name, m.Type, m.Scope, m.Updated, m.Version, m.Description, body)
 	}
 	return b.String()
 }

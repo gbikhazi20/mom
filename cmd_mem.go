@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -19,6 +20,10 @@ import (
 const memUsage = `mom mem — memory shared by Claude Code and Codex
 
   mom mem add <name> --type T --desc "..." --body "..." [--user | --project ID]
+                                        create (refuses a name that's taken)
+  mom mem edit <name> [--append "..."] [--replace "old" --with "new"]...
+                      [--desc "..."] [--type T] [--body "..." --base VERSION]
+                                        change only what you name
   mom mem ls [--all] [--json]           user + current repo (or every project)
   mom mem search <words...> [--all] [--json]
   mom mem show <name> [--json]
@@ -31,6 +36,11 @@ const memUsage = `mom mem — memory shared by Claude Code and Codex
 
 Types: user, feedback, project, reference. Without --user, a memory belongs
 to the git repo you're in (all worktrees of the same remote share it).
+
+edit: --replace must match exactly once (repeat --replace/--with for several
+changes). --body rewrites the whole text and needs --base, the version that
+mom mem show printed, so it can't erase someone else's change. The previous
+version is kept in ~/.mom/.state/backups.
 `
 
 func runMem(p env.Paths, args []string) int {
@@ -43,6 +53,8 @@ func runMem(p env.Paths, args []string) int {
 	switch cmd {
 	case "add":
 		return memAdd(st, args)
+	case "edit":
+		return memEdit(p, st, args)
 	case "ls", "list":
 		return memList(st, args)
 	case "search":
@@ -93,20 +105,89 @@ func memAdd(st memory.Store, args []string) int {
 		fail(err)
 	}
 	m.Scope = scope
-	_, getErr := st.Get(scope, m.Name)
-	m, err = st.Save(m)
+	m, err = st.Create(m)
+	if errors.Is(err, memory.ErrExists) {
+		fmt.Fprintf(os.Stderr, "mom mem: %s already exists in %s; change it with `mom mem edit %s` (--append, --replace/--with, --desc, or --body with --base %s), or pick another name.\n\n",
+			m.Name, m.Scope, m.Name, m.Version)
+		printMemory(os.Stderr, m)
+		return 1
+	}
 	if err != nil {
 		fail(err)
 	}
 	if *asJSON {
 		return emit(m)
 	}
-	verb := "saved"
-	if getErr == nil {
-		verb = "updated"
-	}
-	fmt.Printf("%s %s in %s (%s)\n", verb, m.Name, m.Scope, shortHome(m.Path))
+	fmt.Printf("saved %s in %s (%s), version %s\n", m.Name, m.Scope, shortHome(m.Path), m.Version)
 	return 0
+}
+
+func memEdit(p env.Paths, st memory.Store, args []string) int {
+	fs := flag.NewFlagSet("mem edit", flag.ExitOnError)
+	var e memory.Edit
+	var olds, news multiFlag
+	fs.StringVar(&e.Append, "append", "", "add a paragraph at the end")
+	fs.Var(&olds, "replace", "exact text to replace (must occur once; repeatable)")
+	fs.Var(&news, "with", "replacement for the matching --replace")
+	fs.StringVar(&e.Description, "desc", "", "new one-line description")
+	fs.StringVar(&e.Type, "type", "", "new type")
+	fs.StringVar(&e.Body, "body", "", "rewrite the whole text (needs --base)")
+	fs.StringVar(&e.Base, "base", "", "the version you read (mom mem show prints it)")
+	user := fs.Bool("user", false, "the memory is in the user scope")
+	proj := fs.String("project", "", "the memory is in this project")
+	asJSON := fs.Bool("json", false, "JSON output")
+	pos := parseInterleaved(fs, args)
+	if len(pos) != 1 {
+		fail(fmt.Errorf("usage: mom mem edit <name> [--append ...] [--replace OLD --with NEW]... [--desc ...] [--type T] [--body ... --base VERSION]"))
+	}
+	if len(olds) != len(news) {
+		fail(fmt.Errorf("each --replace needs a matching --with (got %d and %d)", len(olds), len(news)))
+	}
+	for i := range olds {
+		e.Replace = append(e.Replace, [2]string{olds[i], news[i]})
+	}
+	e.Source = agentName()
+
+	var m memory.Memory
+	var err error
+	switch {
+	case *user:
+		m, err = st.Get(memory.User(), pos[0])
+	case *proj != "":
+		m, err = st.Get(memory.Project(*proj), pos[0])
+	default:
+		scopes, _ := memory.ScopesFor(".")
+		m, err = st.Find(pos[0], scopes...)
+	}
+	if err != nil {
+		fail(fmt.Errorf("no memory named %q here (pass --user or --project ID if it's elsewhere)", memory.Slug(pos[0])))
+	}
+	before := m.Version
+	m, err = st.Edit(m.Scope, m.Name, e, filepath.Join(p.BackupsDir, time.Now().Format("20060102-150405")))
+	var conflict *memory.ConflictError
+	if errors.As(err, &conflict) {
+		fmt.Fprintf(os.Stderr, "mom mem: %s; nothing was changed. Merge with the current version below and retry.\n\n", conflict.Reason)
+		printMemory(os.Stderr, conflict.Current)
+		return 1
+	}
+	if err != nil {
+		fail(err)
+	}
+	if *asJSON {
+		return emit(m)
+	}
+	if m.Version == before {
+		fmt.Printf("%s unchanged (version %s)\n", m.Name, m.Version)
+	} else {
+		fmt.Printf("updated %s in %s, version %s (previous version backed up)\n", m.Name, m.Scope, m.Version)
+	}
+	return 0
+}
+
+// printMemory is mom mem show's format. Its first line is what recall
+// looks for to tell that a conversation already holds a memory.
+func printMemory(w io.Writer, m memory.Memory) {
+	fmt.Fprintf(w, "%s  [%s, %s]  updated %s  version %s\n%s\n\n%s\n", m.Name, m.Type, m.Scope, m.Updated, m.Version, m.Description, m.Body)
 }
 
 func memList(st memory.Store, args []string) int {
@@ -168,7 +249,7 @@ func memShow(st memory.Store, args []string) int {
 	if *asJSON {
 		return emit(m)
 	}
-	fmt.Printf("%s  [%s, %s]  updated %s\n%s\n\n%s\n", m.Name, m.Type, m.Scope, m.Updated, m.Description, m.Body)
+	printMemory(os.Stdout, m)
 	return 0
 }
 

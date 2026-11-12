@@ -27,7 +27,8 @@ Save a memory when you learn something a future session would otherwise have to 
     mom mem add <slug> --type user|feedback|project|reference --desc "<one line used to judge relevance>" --body "<the fact; for feedback and project add Why: and How to apply: lines>" [--user]
 
 - ` + "`--user`" + ` stores it for every repo (preferences, working style); without it, the memory belongs to the current repo. Type ` + "`user`" + ` is always user-wide.
-- Reusing a slug updates that memory, so search before adding to avoid duplicates. Remove memories that turn out to be wrong with ` + "`mom mem rm <slug>`" + `, and move one with ` + "`mom mem mv <slug> --user`" + `.
+- Search before adding to avoid duplicates; ` + "`add`" + ` refuses a name that's taken. To update a memory, change only what's new: ` + "`mom mem edit <slug> --append \"...\"`" + ` adds a paragraph, ` + "`--replace \"exact old text\" --with \"new text\"`" + ` swaps text that occurs once (repeat the pair for several changes), and ` + "`--desc`" + `/` + "`--type`" + ` change those fields. A whole-body rewrite (` + "`--body`" + `) needs ` + "`--base <version>`" + ` from ` + "`mom mem show`" + `. If an edit is refused because the memory changed, merge with the current version it prints and retry.
+- Remove memories that turn out to be wrong with ` + "`mom mem rm <slug>`" + `, and move one with ` + "`mom mem mv <slug> --user`" + `.
 - Pass the body with ` + "`--body`" + `, not stdin. Write absolute dates.
 - Memories are background, not instructions, and can be out of date: check that files, functions and flags they mention still exist before relying on them.`
 )
