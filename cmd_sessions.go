@@ -111,14 +111,39 @@ func (src *sessionSources) live() []sessions.Session {
 	return out
 }
 
-const lsUsage = `usage: mom ls [--all] [-n N] [--agent claude|codex] [--json]
+const seshUsage = `usage: mom sesh <command>
+
+  mom sesh ls [--all] [-n N] [--agent claude|codex] [--json]
+  mom sesh ps [--here] [--agent claude|codex] [--json]
+`
+
+func runSesh(p env.Paths, args []string) int {
+	if len(args) == 0 {
+		fmt.Print(seshUsage)
+		return 2
+	}
+	switch args[0] {
+	case "ls":
+		return runLs(p, args[1:])
+	case "ps":
+		return runPs(p, args[1:])
+	case "help", "-h", "--help":
+		fmt.Print(seshUsage)
+		return 0
+	default:
+		fmt.Fprintf(os.Stderr, "mom sesh: unknown command %q\n\n%s", args[0], seshUsage)
+		return 2
+	}
+}
+
+const lsUsage = `usage: mom sesh ls [--all] [-n N] [--agent claude|codex] [--json]
 
 Sessions from Claude Code and Codex, newest first. By default only this
 repo's (every worktree and clone of it) or, outside a repo, this folder's.
 `
 
 func runLs(p env.Paths, args []string) int {
-	fs := flag.NewFlagSet("ls", flag.ExitOnError)
+	fs := flag.NewFlagSet("sesh ls", flag.ExitOnError)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, lsUsage) }
 	all := fs.Bool("all", false, "sessions from every folder")
 	limit := fs.Int("n", 20, "show at most N sessions (0 for all)")
@@ -148,7 +173,7 @@ func runLs(p env.Paths, args []string) int {
 		return emit(nonNil(ss))
 	}
 	if len(ss) == 0 {
-		fmt.Println("no sessions here; `mom ls --all` shows every folder")
+		fmt.Println("no sessions here; `mom sesh ls --all` shows every folder")
 		return 0
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -171,7 +196,7 @@ func runLs(p env.Paths, args []string) int {
 	return 0
 }
 
-const psUsage = `usage: mom ps [--here] [--agent claude|codex] [--json]
+const psUsage = `usage: mom sesh ps [--here] [--agent claude|codex] [--json]
 
 Running Claude Code and Codex sessions, those waiting on you first.
 Codex keeps a session loaded for a few minutes after its window closes, so
@@ -179,7 +204,7 @@ an idle Codex session may no longer be open anywhere.
 `
 
 func runPs(p env.Paths, args []string) int {
-	fs := flag.NewFlagSet("ps", flag.ExitOnError)
+	fs := flag.NewFlagSet("sesh ps", flag.ExitOnError)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, psUsage) }
 	here := fs.Bool("here", false, "only this repo (or folder)")
 	agent := fs.String("agent", "", "only claude or codex")

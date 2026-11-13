@@ -106,16 +106,25 @@ The files live in `~/.mom/memory/user/` and
 ## Sessions
 
 ```sh
-mom ls          # Claude and Codex sessions for this repo, newest first
-mom ls --all    # every session, everywhere
-mom ps          # what's running now, sessions waiting on you first
+mom sesh ls          # Claude and Codex sessions for this repo, newest first
+mom sesh ls --all    # every session, everywhere
+mom sesh ps          # what's running now, sessions waiting on you first
 ```
 
-`mom ps` shows whether each session is working, idle, or waiting for your
+`mom sesh ps` shows whether each session is working, idle, or waiting for your
 approval or input. Codex status comes from its local app-server daemon, and
 headless `codex exec` runs are included.
 
 Every command takes `--json`.
+
+## Inventory
+
+```sh
+mom mcp ls       # canonical MCP servers, with transport and agent scope
+mom skill ls     # canonical skills, with shared or agent-specific scope
+```
+
+Both commands also accept `--json`.
 
 ## Development
 
