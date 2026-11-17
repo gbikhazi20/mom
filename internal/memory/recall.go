@@ -240,12 +240,32 @@ var unsafeRE = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 
 func safeName(s string) string { return unsafeRE.ReplaceAllString(s, "_") }
 
-var wordRE = regexp.MustCompile(`[a-z0-9][a-z0-9_]*`)
+var (
+	wordRE     = regexp.MustCompile(`[a-z0-9][a-z0-9_]*`)
+	compoundRE = regexp.MustCompile(`[a-z0-9][a-z0-9_]*(?:-[a-z0-9_]+)+`)
+)
 
+// counts returns stemmed word counts. A hyphenated identifier such as
+// "agent-main-orchestrator" counts as its single words and also as every run
+// of two or more adjacent parts ("agent-main", "main-orchestrator", ...), so
+// a prompt naming "agent-main" matches it even though "agent" and "main" are
+// common on their own.
 func counts(s string) map[string]int {
+	s = strings.ToLower(s)
 	m := map[string]int{}
-	for _, w := range wordRE.FindAllString(strings.ToLower(strings.ReplaceAll(s, "-", " ")), -1) {
+	for _, w := range wordRE.FindAllString(strings.ReplaceAll(s, "-", " "), -1) {
 		m[stem(w)]++
+	}
+	for _, c := range compoundRE.FindAllString(s, -1) {
+		parts := strings.Split(c, "-")
+		for i := range parts {
+			parts[i] = stem(parts[i])
+		}
+		for i := 0; i < len(parts); i++ {
+			for j := i + 2; j <= len(parts); j++ {
+				m[strings.Join(parts[i:j], "-")]++
+			}
+		}
 	}
 	return m
 }
@@ -269,18 +289,3 @@ func stem(w string) string {
 	}
 	return w
 }
-
-var stopwords = func() map[string]bool {
-	m := map[string]bool{}
-	for _, w := range strings.Fields(`the and for that this with you your can what how why does did should would could
-		please make let use get add fix into from are was were not but all any have has had just like about then than
-		there their them they its also our need want now new one two see run file code here when where which who will
-		some more most much very really still yet again back over only out own same such too way well while look think
-		know sure okay yeah thank thanks able going done doing tell show give take work working change update check
-		something anything everything thing things lets maybe might must time today day week try trying
-		keep during after before being because each every other these those into onto via per
-		is it to of in on at do an or if so be we me my no up as by go ok vs us hi re id im ve ll`) {
-		m[stem(w)] = true
-	}
-	return m
-}()

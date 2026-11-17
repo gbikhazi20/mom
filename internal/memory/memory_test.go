@@ -248,6 +248,24 @@ func TestRecall(t *testing.T) {
 		t.Errorf("trivial prompt recalled %v", got)
 	}
 
+	// Generic words are not distinctive just because few memories use them
+	// (real noise: "how does the dispatcher know, in the current impl").
+	save("current-impl-notes", "current implementation of the big based approach", "always between")
+	if got := recall("in the current impl, why is the diff always so big?"); len(got) != 0 {
+		t.Errorf("generic words recalled %v", got)
+	}
+
+	// A hyphenated identifier matches as a whole, even when its parts are
+	// common words.
+	// "agent" and "main" are common here; only the identifier links them.
+	for i := 0; i < 4; i++ {
+		save(fmt.Sprintf("main-note-%d", i), "main branch note", "rebase onto main")
+	}
+	save("agent-main-orchestrator", "long-lived session that syncs agent-main", "hourly")
+	if got := recall("put up a PR for agent-main into main"); len(got) == 0 || got[0] != "agent-main-orchestrator" {
+		t.Errorf("hyphenated identifier: %v", got)
+	}
+
 	// Already-recalled memories are skipped for the rest of the session.
 	state := t.TempDir()
 	seen := LoadSeen(state, "sess-1")
